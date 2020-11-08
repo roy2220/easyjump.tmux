@@ -11,6 +11,7 @@ from dataclasses import dataclass
 LABEL_CHARS = sys.argv[1]
 LABEL_ATTRS = sys.argv[2]
 TEXT_ATTRS = sys.argv[3]
+SMART_CASE = sys.argv[4] == "on"
 
 
 @dataclass
@@ -99,6 +100,7 @@ class Screen:
         return self._lines
 
     def _fill_info(self):
+        Screen._exit_mode()
         args = [
             "tmux",
             "display-message",
@@ -111,6 +113,16 @@ class Screen:
         self._width = int(results[1])
         self._cursor_x = int(results[2])
         self._cursor_y = int(results[3])
+
+    @staticmethod
+    def _exit_mode():
+        args = [
+            "tmux",
+            "send-keys",
+            "-X",
+            "cancel",
+        ]
+        subprocess.run(args)
 
     @staticmethod
     def _get_snapshot() -> str:
@@ -145,19 +157,21 @@ class Screen:
 
 
 def get_key() -> str:
-    return _get_chars("search key: ", 2)
+    return _get_chars("search key", 2)
 
 
 def get_label(label_length) -> str:
-    return _get_chars("goto label: ", label_length)
+    return _get_chars("goto label", label_length)
 
 
 def _get_chars(prompt: str, number_of_chars: int) -> str:
+    format = "{} ({} char"
+    if number_of_chars >= 2:
+        format += "s"
+    format += "): {:" + str(number_of_chars) + "}"
     chars = ""
     for _ in range(number_of_chars):
-        prompt_with_input = "{} {}{}".format(
-            prompt, chars, "_" * (number_of_chars - len(chars))
-        )
+        prompt_with_input = format.format(prompt, number_of_chars, chars)
         chars += _get_char(prompt_with_input)
     return chars
 
@@ -211,19 +225,35 @@ class Position:
 
 
 def search_key(lines: typing.List[Line], key: str) -> typing.List[Position]:
+    lower_key = key.lower()
     line_offset = 0
     positions: typing.List[Position] = []
     for line_index, line in enumerate(lines):
+        lower_line_chars = line.chars.lower()
         column_index = -len(key)
         while True:
-            column_index = line.chars.find(key, column_index + len(key))
+            column_index = lower_line_chars.find(lower_key, column_index + len(key))
             if column_index < 0:
                 break
+            potential_key = line.chars[column_index : column_index + len(key)]
+            if not _test_potential_key(potential_key, key):
+                continue
             offset = line_offset + column_index
             position = Position(line_index + 1, column_index + 1, offset)
             positions.append(position)
         line_offset += len(line.chars) + len(line.trailing_whitespaces)
     return positions
+
+
+def _test_potential_key(potential_key: str, key: str) -> bool:
+    if potential_key == key:
+        return True
+    if not SMART_CASE:
+        return False
+    for c in key:
+        if c.isupper():
+            return False
+    return True
 
 
 def generate_labels(

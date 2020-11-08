@@ -18,4 +18,7 @@ TEXT_ATTRS=$(get_tmux_option @easyjump-text-attrs '')
 [[ -z ${TEXT_ATTRS} ]] && TEXT_ATTRS='\e[0m\e[38;5;237m'
 TEXT_ATTRS=$(echo -e "${TEXT_ATTRS}")
 
-tmux bind-key "${KEY_BINDING}" run-shell -b "python3 ${CURRENT_DIR@Q}/easyjump.py ${LABEL_CHARS@Q} ${LABEL_ATTRS@Q} ${TEXT_ATTRS@Q}"
+SMART_CASE=$(get_tmux_option @easyjump-smart-case '')
+[[ -z ${SMART_CASE} ]] && SMART_CASE=on
+
+tmux bind-key "${KEY_BINDING}" run-shell -b "python3 ${CURRENT_DIR@Q}/easyjump.py ${LABEL_CHARS@Q} ${LABEL_ATTRS@Q} ${TEXT_ATTRS@Q} ${SMART_CASE@Q}"
