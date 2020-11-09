@@ -311,7 +311,9 @@ def label_keys(
     return raw_screen_with_labels
 
 
-def find_label(label, labels, positions) -> typing.Optional[Position]:
+def find_label(
+    label: str, labels: typing.List[str], positions: typing.List[Position]
+) -> typing.Optional[Position]:
     for i, label2 in enumerate(labels):
         if label == label2:
             position = positions[i]
