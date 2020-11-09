@@ -21,6 +21,7 @@ class Line:
 
 
 class Screen:
+    _id: str
     _tty: str
     _width: int
     _cursor_x: int
@@ -30,8 +31,8 @@ class Screen:
 
     def __init__(self):
         self._fill_info()
-        self._lines = Screen._get_lines(self._width)
-        self._snapshot = Screen._get_snapshot()
+        self._lines = self._get_lines()
+        self._snapshot = self._get_snapshot()
 
     def update(self, raw: str):
         with open(self._tty, "a") as f:
@@ -40,39 +41,30 @@ class Screen:
             f.write("\033[{};{}H".format(self._cursor_y + 1, self._cursor_x + 1))
 
     def jump_to_location(self, line_number: int, column_number: int):
-        args = [
-            "tmux",
-            "copy-mode",
-        ]
+        args = ["tmux", "copy-mode", "-t", self._id]
         subprocess.run(args, check=True)
-        args = [
-            "tmux",
-            "send-keys",
-            "-X",
-            "top-line",
-        ]
+        args = ["tmux", "send-keys", "-t", self._id, "-X", "top-line"]
         subprocess.run(args, check=True)
-        if line_number >= 1:
+        if line_number >= 2:
             args = [
                 "tmux",
                 "send-keys",
+                "-t",
+                self._id,
                 "-X",
                 "-N",
                 str(line_number - 1),
                 "cursor-down",
             ]
             subprocess.run(args, check=True)
-        args = [
-            "tmux",
-            "send-keys",
-            "-X",
-            "start-of-line",
-        ]
+        args = ["tmux", "send-keys", "-X", "start-of-line", "-t", self._id]
         subprocess.run(args, check=True)
-        if column_number >= 1:
+        if column_number >= 2:
             args = [
                 "tmux",
                 "send-keys",
+                "-t",
+                self._id,
                 "-X",
                 "-N",
                 str(column_number - 1),
@@ -105,35 +97,24 @@ class Screen:
             "tmux",
             "display-message",
             "-p",
-            "#{pane_tty},#{pane_width},#{cursor_x},#{cursor_y}",
+            "#{pane_id},#{pane_tty},#{pane_width},#{cursor_x},#{cursor_y}",
         ]
         proc = subprocess.run(args, check=True, capture_output=True)
         results = proc.stdout.decode().split(",")
-        self._tty = results[0]
-        self._width = int(results[1])
-        self._cursor_x = int(results[2])
-        self._cursor_y = int(results[3])
+        self._id = results[0]
+        self._tty = results[1]
+        self._width = int(results[2])
+        self._cursor_x = int(results[3])
+        self._cursor_y = int(results[4])
 
-    @staticmethod
-    def _exit_mode():
-        args = [
-            "tmux",
-            "send-keys",
-            "-X",
-            "cancel",
-        ]
-        subprocess.run(args)
-
-    @staticmethod
-    def _get_snapshot() -> str:
-        args = ["tmux", "capture-pane", "-e", "-p"]
+    def _get_snapshot(self) -> str:
+        args = ["tmux", "capture-pane", "-t", self._id, "-e", "-p"]
         proc = subprocess.run(args, check=True, capture_output=True)
         snapshot = proc.stdout.decode()[:-1].replace("\n", "\r\n")
         return snapshot
 
-    @staticmethod
-    def _get_lines(width: int) -> typing.List[Line]:
-        args = ["tmux", "capture-pane", "-p"]
+    def _get_lines(self) -> typing.List[Line]:
+        args = ["tmux", "capture-pane", "-t", self._id, "-p"]
         proc = subprocess.run(args, check=True, capture_output=True)
         chars_list = proc.stdout.decode()[:-1].split("\n")
         lines: typing.List[Line] = []
@@ -145,15 +126,20 @@ class Screen:
                 )
             )
             if i == len(chars_list) - 1:
-                trailing_whitespaces = " " * (width - display_width)
+                trailing_whitespaces = " " * (self._width - display_width)
             else:
-                trailing_whitespaces = " " * (width - display_width) + "\r\n"
+                trailing_whitespaces = " " * (self._width - display_width) + "\r\n"
             line = Line(
                 chars,
                 trailing_whitespaces,
             )
             lines.append(line)
         return lines
+
+    @staticmethod
+    def _exit_mode():
+        args = ["tmux", "send-keys", "-X", "cancel"]
+        subprocess.run(args)
 
 
 def get_key() -> str:
@@ -168,7 +154,7 @@ def _get_chars(prompt: str, number_of_chars: int) -> str:
     format = "{} ({} char"
     if number_of_chars >= 2:
         format += "s"
-    format += "): {:" + str(number_of_chars) + "}"
+    format += "): {:_<" + str(number_of_chars) + "}"
     chars = ""
     for _ in range(number_of_chars):
         prompt_with_input = format.format(prompt, number_of_chars, chars)
@@ -203,10 +189,10 @@ def _do_get_char(prompt: str, temp_file_name: str) -> str:
     subprocess.run(args, check=True)
 
     def handler(signum, frame):
-        raise TimeoutError
+        raise TimeoutError()
 
     signal.signal(signal.SIGALRM, handler)
-    signal.alarm(10)
+    signal.alarm(30)
 
     try:
         with open(temp_file_name, "r") as f:
