@@ -34,11 +34,32 @@ class Screen:
         self._lines = self._get_lines()
         self._snapshot = self._get_snapshot()
 
-    def update(self, raw: str):
-        with open(self._tty, "a") as f:
-            f.write("\033[2J\033[H")
-            f.write(raw)
-            f.write("\033[{};{}H".format(self._cursor_y + 1, self._cursor_x + 1))
+    def label_positions(
+        self, positions: typing.List["Position"], labels: typing.List[str]
+    ):
+        temp: typing.List[str] = []
+        for line in self._lines:
+            temp.append(line.chars)
+            temp.append(line.trailing_whitespaces)
+        raw = "".join(temp)
+        offset = 0
+        segments: typing.List[str] = []
+        for i, label in enumerate(labels):
+            position = positions[i]
+            if offset < position.offset:
+                segment = TEXT_ATTRS + raw[offset : position.offset]
+                segments.append(segment)
+            segment = LABEL_ATTRS + label
+            segments.append(segment)
+            offset = position.offset + len(label)
+        if offset < len(raw):
+            segment = TEXT_ATTRS + raw[offset:]
+            segments.append(segment)
+        raw_with_labels = "".join(segments)
+        self._update(raw_with_labels)
+
+    def restore(self):
+        self._update(self._snapshot)
 
     def jump_to_location(self, line_number: int, column_number: int):
         args = ["tmux", "copy-mode", "-t", self._id]
@@ -57,9 +78,10 @@ class Screen:
                 "cursor-down",
             ]
             subprocess.run(args, check=True)
-        args = ["tmux", "send-keys", "-X", "start-of-line", "-t", self._id]
-        subprocess.run(args, check=True)
-        if column_number >= 2:
+        if self.lines[0].chars == "":
+            # cursor at end of line
+            line_length = len(self._lines[line_number - 1].chars)
+            reverse_column_number = line_length - column_number + 1
             args = [
                 "tmux",
                 "send-keys",
@@ -67,13 +89,24 @@ class Screen:
                 self._id,
                 "-X",
                 "-N",
-                str(column_number - 1),
-                "cursor-right",
+                str(reverse_column_number),
+                "cursor-left",
             ]
             subprocess.run(args, check=True)
-
-    def restore(self):
-        self.update(self._snapshot)
+        else:
+            # cursor at start of line
+            if column_number >= 2:
+                args = [
+                    "tmux",
+                    "send-keys",
+                    "-t",
+                    self._id,
+                    "-X",
+                    "-N",
+                    str(column_number - 1),
+                    "cursor-right",
+                ]
+                subprocess.run(args, check=True)
 
     @property
     def width(self) -> int:
@@ -135,6 +168,12 @@ class Screen:
             )
             lines.append(line)
         return lines
+
+    def _update(self, raw: str):
+        with open(self._tty, "a") as f:
+            f.write("\033[2J\033[H\033[0m")
+            f.write(raw)
+            f.write("\033[{};{}H".format(self._cursor_y + 1, self._cursor_x + 1))
 
     @staticmethod
     def _exit_mode():
@@ -333,8 +372,7 @@ def main():
         return
     labels, label_length = generate_labels(len(key), len(positions))
     sort_labels(labels, positions, screen.width, screen.cursor_x, screen.cursor_y)
-    raw_screen_with_labels = label_keys(screen.lines, positions, labels)
-    screen.update(raw_screen_with_labels)
+    screen.label_positions(positions, labels)
     try:
         label = get_label(label_length)
         position = find_label(label, labels, positions)
