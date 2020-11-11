@@ -14,19 +14,13 @@ TEXT_ATTRS = sys.argv[3]
 SMART_CASE = sys.argv[4] == "on"
 
 
-@dataclass
-class Line:
-    chars: str
-    trailing_whitespaces: str
-
-
 class Screen:
     _id: str
     _tty: str
     _width: int
     _cursor_x: int
     _cursor_y: int
-    _lines: typing.List[Line]
+    _lines: typing.List["Line"]
     _snapshot: str
 
     def __init__(self):
@@ -63,9 +57,13 @@ class Screen:
 
     def jump_to_location(self, line_number: int, column_number: int):
         args = ["tmux", "copy-mode", "-t", self._id]
-        subprocess.run(args, check=True)
+        subprocess.run(
+            args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
         args = ["tmux", "send-keys", "-t", self._id, "-X", "top-line"]
-        subprocess.run(args, check=True)
+        subprocess.run(
+            args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
         if line_number >= 2:
             args = [
                 "tmux",
@@ -77,7 +75,9 @@ class Screen:
                 str(line_number - 1),
                 "cursor-down",
             ]
-            subprocess.run(args, check=True)
+            subprocess.run(
+                args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
         if self.lines[0].chars == "":
             # cursor at end of line
             line_length = len(self._lines[line_number - 1].chars)
@@ -92,7 +92,9 @@ class Screen:
                 str(reverse_column_number),
                 "cursor-left",
             ]
-            subprocess.run(args, check=True)
+            subprocess.run(
+                args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
         else:
             # cursor at start of line
             if column_number >= 2:
@@ -106,7 +108,12 @@ class Screen:
                     str(column_number - 1),
                     "cursor-right",
                 ]
-                subprocess.run(args, check=True)
+                subprocess.run(
+                    args,
+                    check=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
 
     @property
     def width(self) -> int:
@@ -121,7 +128,7 @@ class Screen:
         return self._cursor_y
 
     @property
-    def lines(self) -> typing.List[Line]:
+    def lines(self) -> typing.List["Line"]:
         return self._lines
 
     def _fill_info(self):
@@ -146,7 +153,7 @@ class Screen:
         snapshot = proc.stdout.decode()[:-1].replace("\n", "\r\n")
         return snapshot
 
-    def _get_lines(self) -> typing.List[Line]:
+    def _get_lines(self) -> typing.List["Line"]:
         args = ["tmux", "capture-pane", "-t", self._id, "-p"]
         proc = subprocess.run(args, check=True, capture_output=True)
         chars_list = proc.stdout.decode()[:-1].split("\n")
@@ -178,7 +185,20 @@ class Screen:
     @staticmethod
     def _exit_mode():
         args = ["tmux", "send-keys", "-X", "cancel"]
-        subprocess.run(args)
+        subprocess.run(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+@dataclass
+class Line:
+    chars: str
+    trailing_whitespaces: str
+
+
+@dataclass
+class Position:
+    line_number: int
+    column_number: int
+    offset: int
 
 
 def get_key() -> str:
@@ -240,13 +260,6 @@ def _do_get_char(prompt: str, temp_file_name: str) -> str:
         signal.alarm(0)
         signal.signal(signal.SIGALRM, signal.SIG_DFL)
     return char
-
-
-@dataclass
-class Position:
-    line_number: int
-    column_number: int
-    offset: int
 
 
 def search_key(lines: typing.List[Line], key: str) -> typing.List[Position]:
@@ -323,31 +336,6 @@ def sort_labels(
     for rank, position_idx in enumerate(rank_2_position_idx):
         sorted_labels[position_idx] = labels[rank]
     labels[:] = sorted_labels
-
-
-def label_keys(
-    lines: typing.List[Line], positions: typing.List[Position], labels: typing.List[str]
-) -> str:
-    temp: typing.List[str] = []
-    for line in lines:
-        temp.append(line.chars)
-        temp.append(line.trailing_whitespaces)
-    raw_screen = "".join(temp)
-    offset = 0
-    segments: typing.List[str] = []
-    for i, label in enumerate(labels):
-        position = positions[i]
-        if offset < position.offset:
-            segment = TEXT_ATTRS + raw_screen[offset : position.offset]
-            segments.append(segment)
-        segment = LABEL_ATTRS + label
-        segments.append(segment)
-        offset = position.offset + len(label)
-    if offset < len(raw_screen):
-        segment = TEXT_ATTRS + raw_screen[offset:]
-        segments.append(segment)
-    raw_screen_with_labels = "".join(segments)
-    return raw_screen_with_labels
 
 
 def find_label(
