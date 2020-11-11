@@ -327,6 +327,10 @@ def main():
     positions = search_key(screen.lines, key)
     if len(positions) == 0:
         return
+    if len(positions) == 1:
+        position = positions[0]
+        screen.jump_to_location(position.line_number, position.column_number)
+        return
     labels, label_length = generate_labels(len(key), len(positions))
     sort_labels(labels, positions, screen.width, screen.cursor_x, screen.cursor_y)
     raw_screen_with_labels = label_keys(screen.lines, positions, labels)
