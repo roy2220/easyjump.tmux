@@ -6,6 +6,7 @@ import sys
 import tempfile
 import typing
 import unicodedata
+from contextlib import contextmanager
 from dataclasses import dataclass
 
 LABEL_CHARS = sys.argv[1]
@@ -18,53 +19,45 @@ class Screen:
     _id: str
     _tty: str
     _width: int
+    _height: int
     _cursor_x: int
     _cursor_y: int
+    _scroll_position: typing.Optional[int]
+    _alternate_on: bool
+    _alternate_enabled: bool
     _lines: typing.List["Line"]
     _snapshot: str
 
     def __init__(self):
         self._fill_info()
         self._lines = self._get_lines()
-        self._snapshot = self._get_snapshot()
+        if not self._alternate_enabled:
+            self._snapshot = self._get_snapshot()
 
+    @contextmanager
     def label_positions(
         self, positions: typing.List["Position"], labels: typing.List[str]
     ):
-        temp: typing.List[str] = []
-        for line in self._lines:
-            temp.append(line.chars)
-            temp.append(line.trailing_whitespaces)
-        raw = "".join(temp)
-        offset = 0
-        segments: typing.List[str] = []
-        for i, label in enumerate(labels):
-            position = positions[i]
-            if offset < position.offset:
-                segment = TEXT_ATTRS + raw[offset : position.offset]
-                segments.append(segment)
-            segment = LABEL_ATTRS + label
-            segments.append(segment)
-            offset = position.offset + len(label)
-        if offset < len(raw):
-            segment = TEXT_ATTRS + raw[offset:]
-            segments.append(segment)
-        raw_with_labels = "".join(segments)
+        raw_with_labels = self._do_label_positions(positions, labels)
+        self._exit_copy_mode()
+        if self._alternate_enabled:
+            self._enter_alternate()
         self._update(raw_with_labels)
+        try:
+            yield
+        finally:
+            if self._alternate_enabled:
+                self._leave_alternate()
+            else:
+                self._update(self._snapshot)
+            self._enter_copy_mode()
 
-    def restore(self):
-        self._update(self._snapshot)
-
-    def jump_to_location(self, line_number: int, column_number: int):
-        args = ["tmux", "copy-mode", "-t", self._id]
-        subprocess.run(
-            args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
+    def jump_to_position(self, position: "Position"):
         args = ["tmux", "send-keys", "-t", self._id, "-X", "top-line"]
         subprocess.run(
             args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
         )
-        if line_number >= 2:
+        if position.line_number >= 2:
             args = [
                 "tmux",
                 "send-keys",
@@ -72,7 +65,7 @@ class Screen:
                 self._id,
                 "-X",
                 "-N",
-                str(line_number - 1),
+                str(position.line_number - 1),
                 "cursor-down",
             ]
             subprocess.run(
@@ -80,8 +73,8 @@ class Screen:
             )
         if self.lines[0].chars == "":
             # cursor at end of line
-            line_length = len(self._lines[line_number - 1].chars)
-            reverse_column_number = line_length - column_number + 1
+            line_length = len(self._lines[position.line_number - 1].chars)
+            reverse_column_number = line_length - position.column_number + 1
             args = [
                 "tmux",
                 "send-keys",
@@ -97,7 +90,7 @@ class Screen:
             )
         else:
             # cursor at start of line
-            if column_number >= 2:
+            if position.column_number >= 2:
                 args = [
                     "tmux",
                     "send-keys",
@@ -105,7 +98,7 @@ class Screen:
                     self._id,
                     "-X",
                     "-N",
-                    str(column_number - 1),
+                    str(position.column_number - 1),
                     "cursor-right",
                 ]
                 subprocess.run(
@@ -132,29 +125,50 @@ class Screen:
         return self._lines
 
     def _fill_info(self):
-        Screen._exit_mode()
         args = [
             "tmux",
             "display-message",
             "-p",
-            "#{pane_id},#{pane_tty},#{pane_width},#{cursor_x},#{cursor_y}",
+            "#{pane_id},#{pane_tty},#{pane_width},#{pane_height},#{cursor_x},#{cursor_y},#{scroll_position},#{alternate_on}",
         ]
         proc = subprocess.run(args, check=True, capture_output=True)
-        results = proc.stdout.decode().split(",")
+        results = proc.stdout.decode()[:-1].split(",")
         self._id = results[0]
         self._tty = results[1]
         self._width = int(results[2])
-        self._cursor_x = int(results[3])
-        self._cursor_y = int(results[4])
-
-    def _get_snapshot(self) -> str:
-        args = ["tmux", "capture-pane", "-t", self._id, "-e", "-p"]
-        proc = subprocess.run(args, check=True, capture_output=True)
-        snapshot = proc.stdout.decode()[:-1].replace("\n", "\r\n")
-        return snapshot
+        self._height = int(results[3])
+        self._cursor_x = int(results[4])
+        self._cursor_y = int(results[5])
+        if results[6] == "":
+            self._scroll_position = None
+        else:
+            self._scroll_position = int(results[6])
+        self._alternate_on = results[7] == "1"
+        if self._alternate_on:
+            self._alternate_enabled = False
+        else:
+            args = ["tmux", "show-option", "-gv", "alternate-screen"]
+            proc = subprocess.run(args, check=True, capture_output=True)
+            result = proc.stdout.decode()[:-1]
+            self._alternate_enabled = result == "on"
 
     def _get_lines(self) -> typing.List["Line"]:
-        args = ["tmux", "capture-pane", "-t", self._id, "-p"]
+        if self._scroll_position is None:
+            start_line_number = 0
+        else:
+            start_line_number = -self._scroll_position
+        end_line_number = start_line_number + self._height - 1
+        args = [
+            "tmux",
+            "capture-pane",
+            "-t",
+            self._id,
+            "-S",
+            str(start_line_number),
+            "-E",
+            str(end_line_number),
+            "-p",
+        ]
         proc = subprocess.run(args, check=True, capture_output=True)
         chars_list = proc.stdout.decode()[:-1].split("\n")
         lines: typing.List[Line] = []
@@ -176,16 +190,78 @@ class Screen:
             lines.append(line)
         return lines
 
+    def _get_snapshot(self) -> str:
+        args = ["tmux", "capture-pane", "-t", self._id, "-e", "-p"]
+        proc = subprocess.run(args, check=True, capture_output=True)
+        snapshot = proc.stdout.decode()[:-1].replace("\n", "\r\n")
+        return snapshot
+
+    def _do_label_positions(
+        self, positions: typing.List["Position"], labels: typing.List[str]
+    ):
+        temp: typing.List[str] = []
+        for line in self._lines:
+            temp.append(line.chars)
+            temp.append(line.trailing_whitespaces)
+        raw = "".join(temp)
+        offset = 0
+        segments: typing.List[str] = []
+        for i, label in enumerate(labels):
+            position = positions[i]
+            if offset < position.offset:
+                segment = TEXT_ATTRS + raw[offset : position.offset]
+                segments.append(segment)
+            segment = LABEL_ATTRS + label
+            segments.append(segment)
+            offset = position.offset + len(label)
+        if offset < len(raw):
+            segment = TEXT_ATTRS + raw[offset:]
+            segments.append(segment)
+        raw_with_labels = "".join(segments)
+        return raw_with_labels
+
+    def _exit_copy_mode(self):
+        if self._scroll_position is None:
+            return
+        args = ["tmux", "send-keys", "-t", self._id, "-X", "cancel"]
+        subprocess.run(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    def _enter_alternate(self):
+        with open(self._tty, "a") as f:
+            f.write("\033[?1049h")
+        self._alternate_on = True
+
+    def _leave_alternate(self):
+        with open(self._tty, "a") as f:
+            f.write("\033[?1049l")
+        self._alternate_on = False
+
     def _update(self, raw: str):
         with open(self._tty, "a") as f:
             f.write("\033[2J\033[H\033[0m")
             f.write(raw)
             f.write("\033[{};{}H".format(self._cursor_y + 1, self._cursor_x + 1))
+        if self._scroll_position is not None and not self._alternate_on:
+            self._scroll_position += self._height  # raw.count("\n") + 1
 
-    @staticmethod
-    def _exit_mode():
-        args = ["tmux", "send-keys", "-X", "cancel"]
-        subprocess.run(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    def _enter_copy_mode(self):
+        args = ["tmux", "copy-mode", "-t", self._id]
+        subprocess.run(
+            args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+        if self._scroll_position is not None:
+            args = [
+                "tmux",
+                "send-keys",
+                "-t",
+                self._id,
+                "-X",
+                "goto-line",
+                str(self._scroll_position),
+            ]
+            subprocess.run(
+                args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
 
 
 @dataclass
@@ -356,19 +432,16 @@ def main():
         return
     if len(positions) == 1:
         position = positions[0]
-        screen.jump_to_location(position.line_number, position.column_number)
+        screen.jump_to_position(position)
         return
     labels, label_length = generate_labels(len(key), len(positions))
     sort_labels(labels, positions, screen.width, screen.cursor_x, screen.cursor_y)
-    screen.label_positions(positions, labels)
-    try:
+    with screen.label_positions(positions, labels):
         label = get_label(label_length)
-        position = find_label(label, labels, positions)
-    finally:
-        screen.restore()
+    position = find_label(label, labels, positions)
     if position is None:
         return
-    screen.jump_to_location(position.line_number, position.column_number)
+    screen.jump_to_position(position)
 
 
 main()
