@@ -22,16 +22,17 @@ class Screen:
     _height: int
     _cursor_x: int
     _cursor_y: int
+    _in_copy_mode: bool
     _scroll_position: typing.Optional[int]
     _alternate_on: bool
-    _alternate_enabled: bool
+    _alternate_allowed: bool
     _lines: typing.List["Line"]
     _snapshot: str
 
     def __init__(self):
         self._fill_info()
         self._lines = self._get_lines()
-        if not self._alternate_enabled:
+        if not self._alternate_allowed:
             self._snapshot = self._get_snapshot()
 
     @contextmanager
@@ -40,19 +41,19 @@ class Screen:
     ):
         raw_with_labels = self._do_label_positions(positions, labels)
         self._exit_copy_mode()
-        if self._alternate_enabled:
+        if self._alternate_allowed:
             self._enter_alternate()
         self._update(raw_with_labels)
         try:
             yield
         finally:
-            if self._alternate_enabled:
+            if self._alternate_allowed:
                 self._leave_alternate()
             else:
                 self._update(self._snapshot)
-            self._enter_copy_mode()
 
     def jump_to_position(self, position: "Position"):
+        self._enter_copy_mode()
         args = ["tmux", "send-keys", "-t", self._id, "-X", "top-line"]
         subprocess.run(
             args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
@@ -139,36 +140,32 @@ class Screen:
         self._height = int(results[3])
         self._cursor_x = int(results[4])
         self._cursor_y = int(results[5])
-        if results[6] == "":
-            self._scroll_position = None
-        else:
+        self._in_copy_mode = results[6] != ""
+        if self._in_copy_mode:
             self._scroll_position = int(results[6])
+        else:
+            self._scroll_position = None
         self._alternate_on = results[7] == "1"
         if self._alternate_on:
-            self._alternate_enabled = False
+            self._alternate_allowed = False
         else:
             args = ["tmux", "show-option", "-gv", "alternate-screen"]
             proc = subprocess.run(args, check=True, capture_output=True)
             result = proc.stdout.decode()[:-1]
-            self._alternate_enabled = result == "on"
+            self._alternate_allowed = result == "on"
 
     def _get_lines(self) -> typing.List["Line"]:
-        if self._scroll_position is None:
-            start_line_number = 0
-        else:
+        args = ["tmux", "capture-pane", "-t", self._id]
+        if self._in_copy_mode:
             start_line_number = -self._scroll_position
-        end_line_number = start_line_number + self._height - 1
-        args = [
-            "tmux",
-            "capture-pane",
-            "-t",
-            self._id,
-            "-S",
-            str(start_line_number),
-            "-E",
-            str(end_line_number),
-            "-p",
-        ]
+            end_line_number = start_line_number + self._height - 1
+            args += [
+                "-S",
+                str(start_line_number),
+                "-E",
+                str(end_line_number),
+            ]
+        args += ["-p"]
         proc = subprocess.run(args, check=True, capture_output=True)
         chars_list = proc.stdout.decode()[:-1].split("\n")
         lines: typing.List[Line] = []
@@ -221,10 +218,33 @@ class Screen:
         return raw_with_labels
 
     def _exit_copy_mode(self):
-        if self._scroll_position is None:
+        if not self._in_copy_mode:
             return
         args = ["tmux", "send-keys", "-t", self._id, "-X", "cancel"]
         subprocess.run(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self._in_copy_mode = False
+
+    def _enter_copy_mode(self):
+        if self._in_copy_mode:
+            return
+        args = ["tmux", "copy-mode", "-t", self._id]
+        subprocess.run(
+            args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+        if self._scroll_position is not None:
+            args = [
+                "tmux",
+                "send-keys",
+                "-t",
+                self._id,
+                "-X",
+                "goto-line",
+                str(self._scroll_position),
+            ]
+            subprocess.run(
+                args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+        self._in_copy_mode = True
 
     def _enter_alternate(self):
         with open(self._tty, "a") as f:
@@ -243,25 +263,6 @@ class Screen:
             f.write("\033[{};{}H".format(self._cursor_y + 1, self._cursor_x + 1))
         if self._scroll_position is not None and not self._alternate_on:
             self._scroll_position += self._height  # raw.count("\n") + 1
-
-    def _enter_copy_mode(self):
-        args = ["tmux", "copy-mode", "-t", self._id]
-        subprocess.run(
-            args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
-        if self._scroll_position is not None:
-            args = [
-                "tmux",
-                "send-keys",
-                "-t",
-                self._id,
-                "-X",
-                "goto-line",
-                str(self._scroll_position),
-            ]
-            subprocess.run(
-                args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-            )
 
 
 @dataclass
