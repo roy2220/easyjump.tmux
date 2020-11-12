@@ -22,6 +22,7 @@ class Screen:
     _height: int
     _cursor_x: int
     _cursor_y: int
+    _history_size: int
     _in_copy_mode: bool
     _scroll_position: typing.Optional[int]
     _alternate_on: bool
@@ -53,7 +54,9 @@ class Screen:
                 self._update(self._snapshot)
 
     def jump_to_position(self, position: "Position"):
-        self._enter_copy_mode()
+        ok = self._enter_copy_mode()
+        if not ok:
+            return
         args = ["tmux", "send-keys", "-t", self._id, "-X", "top-line"]
         subprocess.run(
             args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
@@ -73,7 +76,7 @@ class Screen:
                 args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
             )
         if self.lines[0].chars == "":
-            # cursor at end of line
+            # adapt to bug of tmux: cursor at end of line,
             line_length = len(self._lines[position.line_number - 1].chars)
             reverse_column_number = line_length - position.column_number + 1
             args = [
@@ -130,7 +133,7 @@ class Screen:
             "tmux",
             "display-message",
             "-p",
-            "#{pane_id},#{pane_tty},#{pane_width},#{pane_height},#{cursor_x},#{cursor_y},#{scroll_position},#{alternate_on}",
+            "#{pane_id},#{pane_tty},#{pane_width},#{pane_height},#{cursor_x},#{cursor_y},#{history_size},#{scroll_position},#{alternate_on}",
         ]
         proc = subprocess.run(args, check=True, capture_output=True)
         results = proc.stdout.decode()[:-1].split(",")
@@ -140,12 +143,13 @@ class Screen:
         self._height = int(results[3])
         self._cursor_x = int(results[4])
         self._cursor_y = int(results[5])
-        self._in_copy_mode = results[6] != ""
+        self._history_size = int(results[6])
+        self._in_copy_mode = results[7] != ""
         if self._in_copy_mode:
-            self._scroll_position = int(results[6])
+            self._scroll_position = int(results[7])
         else:
             self._scroll_position = None
-        self._alternate_on = results[7] == "1"
+        self._alternate_on = results[8] == "1"
         if self._alternate_on:
             self._alternate_allowed = False
         else:
@@ -224,14 +228,21 @@ class Screen:
         subprocess.run(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self._in_copy_mode = False
 
-    def _enter_copy_mode(self):
+    def _enter_copy_mode(self) -> bool:
         if self._in_copy_mode:
-            return
+            return True
         args = ["tmux", "copy-mode", "-t", self._id]
         subprocess.run(
             args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
         )
         if self._scroll_position is not None:
+            history_size = self._get_history_size()
+            if history_size % 2 != self._history_size % 2:
+                # adapt to bug of tmux
+                self._scroll_position -= 1
+            self._history_size = history_size
+            if self._scroll_position > self._history_size:
+                return False
             args = [
                 "tmux",
                 "send-keys",
@@ -245,6 +256,13 @@ class Screen:
                 args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
             )
         self._in_copy_mode = True
+        return True
+
+    def _get_history_size(self) -> int:
+        args = ["tmux", "display-message", "-t", self._id, "-p", "#{history_size}"]
+        proc = subprocess.run(args, check=True, capture_output=True)
+        history_size = int(proc.stdout.decode()[:-1])
+        return history_size
 
     def _enter_alternate(self):
         with open(self._tty, "a") as f:
