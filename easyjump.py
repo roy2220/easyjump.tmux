@@ -163,31 +163,20 @@ class Screen:
         if self._in_copy_mode:
             start_line_number = -self._scroll_position
             end_line_number = start_line_number + self._height - 1
-            args += [
-                "-S",
-                str(start_line_number),
-                "-E",
-                str(end_line_number),
-            ]
+            args += ["-S", str(start_line_number), "-E", str(end_line_number)]
         args += ["-p"]
         proc = subprocess.run(args, check=True, capture_output=True)
         chars_list = proc.stdout.decode()[:-1].split("\n")
         lines: typing.List[Line] = []
         for i, chars in enumerate(chars_list):
             display_width = sum(
-                map(
-                    lambda c: 2 if unicodedata.east_asian_width(c) == "W" else 1,
-                    chars,
-                )
+                map(lambda c: 2 if unicodedata.east_asian_width(c) == "W" else 1, chars)
             )
             if i == len(chars_list) - 1:
                 trailing_whitespaces = " " * (self._width - display_width)
             else:
                 trailing_whitespaces = " " * (self._width - display_width) + "\r\n"
-            line = Line(
-                chars,
-                trailing_whitespaces,
-            )
+            line = Line(chars, trailing_whitespaces)
             lines.append(line)
         return lines
 

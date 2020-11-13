@@ -4,9 +4,7 @@ EasyMotion for Tmux
 
 ## Requirements
 
-- Python >= 3.7
-- Bash >= 5.0
-- GNU Coreutils
+- Python >= 3.8
 
 ## Installation
 

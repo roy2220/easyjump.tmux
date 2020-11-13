@@ -1,26 +1,56 @@
-#!/usr/bin/env bash
+#!/usr/bin/env python3
+import datetime
+import os
+import shlex
+import subprocess
+import sys
+import tempfile
 
-set -o errexit -o nounset -o pipefail # -o xtrace
 
-KEY_BINDING=$(tmux show-option -gqv @easyjump-key-binding)
-[[ -z ${KEY_BINDING} ]] && KEY_BINDING=j
+def get_option(option_name: str, default_option_value: str) -> str:
+    args = ["tmux", "show-option", "-gqv", option_name]
+    proc = subprocess.run(args, check=True, capture_output=True)
+    option_value = proc.stdout.decode()[:-1]
+    if option_value == "":
+        option_value = default_option_value
+    return option_value
 
-DIR="$(dirname $(realpath "${0}"))"
 
-LABEL_CHARS=$(tmux show-option -gqv @easyjump-label-chars)
-[[ -z ${LABEL_CHARS} ]] && LABEL_CHARS=fjdkslaghrueiwoqptyvncmxzb1234567890
+def main():
+    key_binding = get_option("@easyjump-key-binding", "j")
+    label_chars = get_option(
+        "@easyjump-label-chars", "fjdkslaghrueiwoqptyvncmxzb1234567890"
+    )
+    label_attrs = get_option("@easyjump-label-attrs", "\033[1m\033[38;5;172m")
+    text_attrs = get_option("@easyjump-text-attrs", "\033[0m\033[38;5;237m")
+    smart_case = get_option("@easyjump-smart-case", r"on")
+    dir_name = os.path.dirname(os.path.abspath(__file__))
+    script_file_name = os.path.join(dir_name, "easyjump.py")
+    time_str = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
+    log_file_name = os.path.join(
+        tempfile.gettempdir(), "easyjump_{}.log".format(time_str)
+    )
+    args = [
+        "tmux",
+        "bind-key",
+        key_binding,
+        "run-shell",
+        "-b",
+        shlex.join(
+            [
+                sys.executable,
+                script_file_name,
+                label_chars,
+                label_attrs,
+                text_attrs,
+                smart_case,
+            ]
+        )
+        + " >>{} 2>&1 || true".format(shlex.quote(log_file_name)),
+    ]
+    subprocess.run(
+        args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+    )
 
-LABEL_ATTRS=$(tmux show-option -gqv @easyjump-label-attrs)
-[[ -z ${LABEL_ATTRS} ]] && LABEL_ATTRS='\e[1m\e[38;5;172m'
-LABEL_ATTRS=$(echo -e "${LABEL_ATTRS}")
 
-TEXT_ATTRS=$(tmux show-option -gqv @easyjump-text-attrs)
-[[ -z ${TEXT_ATTRS} ]] && TEXT_ATTRS='\e[0m\e[38;5;237m'
-TEXT_ATTRS=$(echo -e "${TEXT_ATTRS}")
-
-SMART_CASE=$(tmux show-option -gqv @easyjump-smart-case)
-[[ -z ${SMART_CASE} ]] && SMART_CASE=on
-
-LOG_FILE=$(mktemp /tmp/easyjump-$(date +%Y%m%d%H%M%S)-XXXXXX.log)
-
-tmux bind-key "${KEY_BINDING}" run-shell -b "python3 ${DIR@Q}/easyjump.py ${LABEL_CHARS@Q} ${LABEL_ATTRS@Q} ${TEXT_ATTRS@Q} ${SMART_CASE@Q} >>${LOG_FILE@Q} 2>&1 || true"
+main()
