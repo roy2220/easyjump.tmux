@@ -153,10 +153,6 @@ class Screen:
         )
 
     @property
-    def width(self) -> int:
-        return self._width
-
-    @property
     def cursor_x(self) -> int:
         return self._cursor_x
 
@@ -451,13 +447,17 @@ def generate_labels(
 def sort_labels(
     labels: typing.List[str],
     positions: typing.List[Position],
-    screen_width: int,
     cursor_x: int,
     cursor_y: int,
 ):
-    cursor_offset = cursor_y * screen_width + cursor_x
+    def distance_to_cursor(position: Position) -> float:
+        a = position.column_number - (cursor_x + 1)
+        b = 2 * (position.line_number - (cursor_y + 1))
+        c = (a * a + b * b) ** 0.5
+        return c
+
     rank_2_position_idx = list(range(len(labels)))
-    rank_2_position_idx.sort(key=lambda i: abs(positions[i].offset - cursor_offset))
+    rank_2_position_idx.sort(key=lambda i: distance_to_cursor(positions[i]))
     sorted_labels = [""] * len(labels)
     for rank, position_idx in enumerate(rank_2_position_idx):
         sorted_labels[position_idx] = labels[rank]
@@ -485,7 +485,7 @@ def main():
         screen.jump_to_position(position)
         return
     labels, label_length = generate_labels(len(key), len(positions))
-    sort_labels(labels, positions, screen.width, screen.cursor_x, screen.cursor_y)
+    sort_labels(labels, positions, screen.cursor_x, screen.cursor_y)
     with screen.label_positions(positions, labels):
         label = get_label(label_length)
     position = find_label(label, labels, positions)

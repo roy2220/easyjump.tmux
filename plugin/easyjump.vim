@@ -5,7 +5,7 @@ let g:loaded_easyjump = v:true
 
 let s:dir_name = expand('<sfile>:p:h')
 
-function! s:easyjump() abort
+function! s:execute() abort
     let script_file_name = s:dir_name.'/../easyjump.py'
     let label_chars = get(g:, 'easyjump_label_chars', '')
     let label_attrs = get(g:, 'easyjump_label_attrs', '')
@@ -22,7 +22,7 @@ function! s:easyjump() abort
     call system(command)
     redraw!
 endfunction
-command! -nargs=0 EasyJump call s:easyjump()
+command! -nargs=0 EasyJump call s:execute()
 
 nnoremap <Plug>EasyJump :EasyJump<CR>
 if !hasmapto('<Plug>EasyJump', 'n')
