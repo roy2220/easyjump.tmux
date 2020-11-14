@@ -114,7 +114,7 @@ set mouse=a
   3. Reload Vim configuration:
 
      ```viml
-     :source ~/.tmux.conf
+     :source ~/.vimrc
      ```
 ### Usage in Vim
 
