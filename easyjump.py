@@ -8,11 +8,23 @@ import typing
 import unicodedata
 from contextlib import contextmanager
 from dataclasses import dataclass
+from enum import Enum
 
-LABEL_CHARS = sys.argv[1]
-LABEL_ATTRS = sys.argv[2]
-TEXT_ATTRS = sys.argv[3]
-SMART_CASE = sys.argv[4] == "on"
+
+class Mode(Enum):
+    XCOPY = 1
+    MOUSE = 2
+
+
+MODE = {
+    "xcopy": Mode.XCOPY,
+    "mouse": Mode.MOUSE,
+}[sys.argv[1].lower()]
+
+LABEL_CHARS = sys.argv[2] or "fjdkslaghrueiwoqptyvncmxzb1234567890"
+LABEL_ATTRS = sys.argv[3] or "\033[1m\033[38;5;172m"
+TEXT_ATTRS = sys.argv[4] or "\033[0m\033[38;5;237m"
+SMART_CASE = (sys.argv[5].lower() or "on") == "on"
 
 
 class Screen:
@@ -32,6 +44,8 @@ class Screen:
 
     def __init__(self):
         self._fill_info()
+        if MODE == Mode.MOUSE:
+            self._exit_copy_mode()
         self._lines = self._get_lines()
         if not self._alternate_allowed:
             self._snapshot = self._get_snapshot()
@@ -41,7 +55,8 @@ class Screen:
         self, positions: typing.List["Position"], labels: typing.List[str]
     ):
         raw_with_labels = self._do_label_positions(positions, labels)
-        self._exit_copy_mode()
+        if MODE == Mode.XCOPY:
+            self._exit_copy_mode()
         if self._alternate_allowed:
             self._enter_alternate()
         self._update(raw_with_labels)
@@ -54,6 +69,14 @@ class Screen:
                 self._update(self._snapshot)
 
     def jump_to_position(self, position: "Position"):
+        if MODE == MODE.XCOPY:
+            self._xcopy_jump_to_position(position)
+        elif MODE == MODE.MOUSE:
+            self._mouse_jump_to_position(position)
+        else:
+            assert False
+
+    def _xcopy_jump_to_position(self, position: "Position"):
         ok = self._enter_copy_mode()
         if not ok:
             return
@@ -111,6 +134,23 @@ class Screen:
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
+
+    def _mouse_jump_to_position(self, position: "Position"):
+        x = bytes((0x20 + position.column_number,))
+        y = bytes((0x20 + position.line_number,))
+        keys = b"\033[I\033[M " + x + y + b"\033[M#" + x + y + b"\033[O"
+        keys_in_hex = keys.hex()
+        args = [
+            "tmux",
+            "send-keys",
+            "-t",
+            self._id,
+            "-H",
+        ]
+        args.extend(keys_in_hex[i : i + 2] for i in range(0, len(keys_in_hex), 2))
+        subprocess.run(
+            args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
 
     @property
     def width(self) -> int:
@@ -214,7 +254,9 @@ class Screen:
         if not self._in_copy_mode:
             return
         args = ["tmux", "send-keys", "-t", self._id, "-X", "cancel"]
-        subprocess.run(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(
+            args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
         self._in_copy_mode = False
 
     def _enter_copy_mode(self) -> bool:
