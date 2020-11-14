@@ -48,7 +48,13 @@ def main():
     subprocess.run(
         args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
     )
-    args[2:3] = ['-T', 'copy-mode-vi', 'C-' + key_binding]
+    args2 = args[:]
+    args2 = ['-T', 'copy-mode', 'C-' + key_binding]
+    subprocess.run(
+        args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+    )
+    args3 = args[:]
+    args3 = ['-T', 'copy-mode-vi', 'C-' + key_binding]
     subprocess.run(
         args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
     )
