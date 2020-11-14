@@ -48,6 +48,10 @@ def main():
     subprocess.run(
         args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
     )
+    args[2:3] = ['-T', 'copy-mode-vi', 'C-' + key_binding]
+    subprocess.run(
+        args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+    )
 
 
 main()

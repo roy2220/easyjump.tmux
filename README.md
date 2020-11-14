@@ -56,7 +56,8 @@ There some differences between `tmux-jump` and `easyjump.tmux`:
 
 ## Usage
 
-Press `prefix` + <kbd>j</kbd>
+1. Press `prefix` + <kbd>j</kbd> in no mode.
+2. Press Ctrl + <kbd>j</kbd> in `Copy` mode.
 
 ## Configuration
 
