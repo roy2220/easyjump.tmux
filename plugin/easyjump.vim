@@ -19,20 +19,16 @@ function! s:execute() abort
     \    shellescape(text_attrs),
     \    shellescape(smart_case ? 'on' : 'off'),
     \)
-    let s:pending_command = system(command)
+    let command = system(command)
     redraw!
     if v:shell_error != 0
         return
     endif
-    if s:pending_command == ''
+    if command == ''
         return
     endif
-    autocmd SafeState <buffer> ++once call s:do_execute(s:pending_command)
-endfunction
-
-function! s:do_execute(command) abort
     normal! m'
-    call system('nohup '.a:command.' >/dev/null 2>&1 &')
+    call system('nohup '.command.' >/dev/null 2>&1 &')
 endfunction
 
 nnoremap <Plug>EasyJump :EasyJump<CR>
