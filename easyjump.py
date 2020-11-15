@@ -148,9 +148,7 @@ class Screen:
             "-H",
         ]
         args.extend(keys_in_hex[i : i + 2] for i in range(0, len(keys_in_hex), 2))
-        subprocess.run(
-            args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
+        sys.stdout.write(shlex.join(args))
 
     @property
     def cursor_x(self) -> int:

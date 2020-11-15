@@ -5,6 +5,7 @@ let g:loaded_easyjump = v:true
 
 let s:dir_name = expand('<sfile>:p:h')
 
+command! -nargs=0 EasyJump call s:execute()
 function! s:execute() abort
     let script_file_name = s:dir_name.'/../easyjump.py'
     let label_chars = get(g:, 'easyjump_label_chars', '')
@@ -18,11 +19,21 @@ function! s:execute() abort
     \    shellescape(text_attrs),
     \    shellescape(smart_case ? 'on' : 'off'),
     \)
-    normal! m'
-    call system(command)
+    let s:pending_command = system(command)
     redraw!
+    if v:shell_error != 0
+        return
+    endif
+    if s:pending_command == ''
+        return
+    endif
+    autocmd SafeState <buffer> ++once call s:do_execute(s:pending_command)
 endfunction
-command! -nargs=0 EasyJump call s:execute()
+
+function! s:do_execute(command) abort
+    normal! m'
+    call system('nohup '.a:command.' >/dev/null 2>&1 &')
+endfunction
 
 nnoremap <Plug>EasyJump :EasyJump<CR>
 if !hasmapto('<Plug>EasyJump', 'n')
