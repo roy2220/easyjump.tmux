@@ -10,7 +10,7 @@ EasyMotion for Tmux
 
 There some differences between `tmux-jump` and `easyjump.tmux`:
 
-- `easyjump.tmux` can be integrated into Vim! 🔥 See [Integration with Vim](#integration-with-vim) for more details.
+- `easyjump.tmux` can be integrated into Vim/Neovim! 🔥 See [Integration with Vim](#integration-with-vim) for more details.
 - `easyjump.tmux` supports the smart case-insensitive search (turned on by default).
 - `tmux-jump` searches by 1 char and `easyjump.tmux` does by 2 chars.
 - `tmux-jump` only matches the prefixes of words, `easyjump.tmux` matches all substrings.
