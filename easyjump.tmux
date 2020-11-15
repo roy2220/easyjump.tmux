@@ -16,10 +16,10 @@ def get_option(option_name: str) -> str:
 
 def main():
     key_binding = get_option("@easyjump-key-binding") or "j"
+    smart_case = get_option("@easyjump-smart-case")
     label_chars = get_option("@easyjump-label-chars")
     label_attrs = get_option("@easyjump-label-attrs")
     text_attrs = get_option("@easyjump-text-attrs")
-    smart_case = get_option("@easyjump-smart-case")
     dir_name = os.path.dirname(os.path.abspath(__file__))
     script_file_name = os.path.join(dir_name, "easyjump.py")
     time_str = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
@@ -37,10 +37,10 @@ def main():
                 sys.executable,
                 script_file_name,
                 "xcopy",
+                smart_case,
                 label_chars,
                 label_attrs,
                 text_attrs,
-                smart_case,
             ]
         )
         + " >>{} 2>&1 || true".format(shlex.quote(log_file_name)),

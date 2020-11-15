@@ -12,19 +12,27 @@ from enum import Enum
 
 
 class Mode(Enum):
-    XCOPY = 1
-    MOUSE = 2
+    MOUSE = 1
+    XCOPY = 2
+
+
+def arg(arg_idx: int) -> str:
+    args = sys.argv
+    if arg_idx >= len(args):
+        return ""
+    arg = args[arg_idx]
+    return arg
 
 
 MODE = {
-    "xcopy": Mode.XCOPY,
     "mouse": Mode.MOUSE,
-}[sys.argv[1].lower()]
-
-LABEL_CHARS = sys.argv[2] or "fjdkslaghrueiwoqptyvncmxzb1234567890"
-LABEL_ATTRS = sys.argv[3] or "\033[1m\033[38;5;172m"
-TEXT_ATTRS = sys.argv[4] or "\033[0m\033[38;5;237m"
-SMART_CASE = (sys.argv[5].lower() or "on") == "on"
+    "xcopy": Mode.XCOPY,
+}[arg(1).lower() or "mouse"]
+SMART_CASE = (arg(2).lower() or "on") == "on"
+LABEL_CHARS = arg(3) or "fjdkslaghrueiwoqptyvncmxzb1234567890"
+LABEL_ATTRS = arg(4) or "\033[1m\033[38;5;172m"
+TEXT_ATTRS = arg(5) or "\033[0m\033[38;5;237m"
+PRINT_COMMAND_ONLY = (arg(6).lower() or "off") == "on"  # mouse mode only
 
 
 class Screen:
@@ -138,7 +146,7 @@ class Screen:
     def _mouse_jump_to_position(self, position: "Position"):
         x = bytes((0x20 + position.column_number,))
         y = bytes((0x20 + position.line_number,))
-        keys = b"\033[I\033[M " + x + y + b"\033[M#" + x + y + b"\033[O"
+        keys = b"\033[M " + x + y + b"\033[M#" + x + y
         keys_in_hex = keys.hex()
         args = [
             "tmux",
@@ -148,7 +156,12 @@ class Screen:
             "-H",
         ]
         args.extend(keys_in_hex[i : i + 2] for i in range(0, len(keys_in_hex), 2))
-        sys.stdout.write(shlex.join(args))
+        if PRINT_COMMAND_ONLY:
+            sys.stdout.write(shlex.join(args))
+        else:
+            subprocess.run(
+                args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
 
     @property
     def cursor_x(self) -> int:

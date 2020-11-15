@@ -65,10 +65,10 @@ defaults:
 
 ```tmux
 set-option -g @easyjump-key-binding "j"
+set-option -g @easyjump-smart-case "on"
 set-option -g @easyjump-label-chars "fjdkslaghrueiwoqptyvncmxzb1234567890"
 set-option -g @easyjump-label-attrs "\e[1m\e[38;5;172m"
 set-option -g @easyjump-text-attrs "\e[0m\e[38;5;237m"
-set-option -g @easyjump-smart-case "on"
 ```
 
 ## Integration with Vim
@@ -125,10 +125,10 @@ Press Ctrl + <kbd>j</kbd> in `Normal`/`Insert` mode
 defaults:
 
 ```viml
+let g:easyjump_smart_case = v:true
 let g:easyjump_label_chars = 'fjdkslaghrueiwoqptyvncmxzb1234567890'
 let g:easyjump_label_attrs = "\e[1m\e[38;5;172m"
 let g:easyjump_text_attrs = "\e[0m\e[38;5;237m"
-let g:easyjump_smart_case = v:true
 
 nmap <C-J> <Plug>EasyJump
 imap <C-J> <Plug>EasyJump
