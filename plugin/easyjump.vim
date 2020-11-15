@@ -20,7 +20,7 @@ function! s:execute() abort
     \    shellescape(smart_case ? 'on' : 'off'),
     \)
     let command = system(command)
-    redraw!
+    mode
     if v:shell_error != 0
         return
     endif
