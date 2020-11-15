@@ -19,14 +19,16 @@ function! s:execute() abort
     \    shellescape(label_attrs),
     \    shellescape(text_attrs),
     \)
-    let command = system(command)
+    let result = system(command)
     mode
     if v:shell_error != 0
+        echoerr result
         return
     endif
-    if command == ''
+    if result == ''
         return
     endif
+    let command = result
     normal! m'
     call system('nohup '.command.' >/dev/null 2>&1 &')
 endfunction

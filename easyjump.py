@@ -505,4 +505,7 @@ def main():
     screen.jump_to_position(position)
 
 
-main()
+try:
+    main()
+except KeyboardInterrupt:
+    pass
