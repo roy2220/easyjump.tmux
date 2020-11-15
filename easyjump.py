@@ -335,14 +335,21 @@ class Position:
 
 
 def get_key() -> str:
-    return _get_chars("search key", 2)
+    return _get_chars("search for key", 2, None)
 
 
-def get_label(label_length) -> str:
-    return _get_chars("goto label", label_length)
+def get_label(label_length, candidate_labels: typing.List[str]) -> typing.Optional[str]:
+    try:
+        return _get_chars("goto label", label_length, candidate_labels)
+    except ValueError:
+        return None
 
 
-def _get_chars(prompt: str, number_of_chars: int) -> str:
+def _get_chars(
+    prompt: str,
+    number_of_chars: int,
+    expected_chars_list: typing.Optional[typing.List[str]],
+) -> str:
     format = "{} ({} char"
     if number_of_chars >= 2:
         format += "s"
@@ -351,6 +358,12 @@ def _get_chars(prompt: str, number_of_chars: int) -> str:
     for _ in range(number_of_chars):
         prompt_with_input = format.format(prompt, number_of_chars, chars)
         chars += _get_char(prompt_with_input)
+        if expected_chars_list is not None:
+            for expected_chars in expected_chars_list:
+                if expected_chars.startswith(chars):
+                    break
+            else:
+                raise ValueError()
     return chars
 
 
@@ -395,7 +408,7 @@ def _do_get_char(prompt: str, temp_file_name: str) -> str:
     return char
 
 
-def search_key(lines: typing.List[Line], key: str) -> typing.List[Position]:
+def search_for_key(lines: typing.List[Line], key: str) -> typing.List[Position]:
     lower_key = key.lower()
     line_offset = 0
     positions: typing.List[Position] = []
@@ -488,7 +501,7 @@ def find_label(
 def main():
     screen = Screen()
     key = get_key()
-    positions = search_key(screen.lines, key)
+    positions = search_for_key(screen.lines, key)
     if len(positions) == 0:
         return
     if len(positions) == 1:
@@ -498,7 +511,9 @@ def main():
     labels, label_length = generate_labels(len(key), len(positions))
     sort_labels(labels, positions, screen.cursor_x, screen.cursor_y)
     with screen.label_positions(positions, labels):
-        label = get_label(label_length)
+        label = get_label(label_length, labels)
+    if label is None:
+        return
     position = find_label(label, labels, positions)
     if position is None:
         return
