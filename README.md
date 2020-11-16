@@ -56,8 +56,9 @@ There some differences between `tmux-jump` and `easyjump.tmux`:
 
 ## Usage
 
-1. Press `prefix` + <kbd>j</kbd> in no mode.
-2. Press Ctrl + <kbd>j</kbd> in `Copy` mode.
+- Press `prefix` + <kbd>j</kbd> to invoke EasyJump.
+- Press <kbd>Ctrl</kbd> + <kbd>j</kbd> to invoke EasyJump in `copy mode`.
+- Press <kbd>Enter</kbd> to cancel EasyJump.
 
 ## Configuration
 
@@ -118,7 +119,8 @@ set mouse=a
      ```
 ### Usage in Vim
 
-Press Ctrl + <kbd>j</kbd> in `Normal`/`Insert` mode
+- Press <kbd>Ctrl</kbd> + <kbd>j</kbd> to invoke EasyJump in `normal mode` or `insert mode`.
+- Press <kbd>Enter</kbd> to cancel EasyJump.
 
 ### Configuration in Vim
 

@@ -398,13 +398,14 @@ def _do_get_char(prompt: str, temp_file_name: str) -> str:
 
     signal.signal(signal.SIGALRM, handler)
     signal.alarm(30)
-
     try:
         with open(temp_file_name, "r") as f:
             char = f.readline()[:-1]
     finally:
         signal.alarm(0)
         signal.signal(signal.SIGALRM, signal.SIG_DFL)
+    if char == "":
+        raise SystemExit()
     return char
 
 
