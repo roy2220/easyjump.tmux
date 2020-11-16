@@ -14,7 +14,7 @@ function! s:execute() abort
     let text_attrs = get(g:, 'easyjump_text_attrs', '')
     let command = printf('/usr/bin/env python3 %s mouse %s %s %s %s on',
     \    shellescape(script_file_name),
-    \    shellescape(smart_case ? 'on' : 'off'),
+    \    smart_case ? 'on' : 'off',
     \    shellescape(label_chars),
     \    shellescape(label_attrs),
     \    shellescape(text_attrs),

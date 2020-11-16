@@ -73,7 +73,7 @@ set-option -g @easyjump-text-attrs "\e[0m\e[38;5;237m"
 
 ## Integration with Vim
 
-`easyjump.tmux` move the cursor in Vim by simulating mouse clicks. So it's **important** to ensure the mouse is enabled in Vim.
+`easyjump.tmux` moves the cursor in Vim by simulating mouse clicks. So it's **important** to ensure the mouse is enabled in Vim.
 
 Add to `~/.vimrc` to enable the mouse:
 
