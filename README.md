@@ -74,13 +74,7 @@ set-option -g @easyjump-text-attrs "\e[0m\e[38;5;237m"
 
 ## Integration with Vim
 
-`easyjump.tmux` moves the cursor in Vim by simulating mouse clicks. So it's **important** to ensure the mouse is enabled in Vim.
-
-Add to `~/.vimrc` to enable the mouse:
-
-```vim
-set mouse=a
-```
+Vim 8 or Neovim is required.
 
 ### Demonstration in Vim
 
@@ -119,7 +113,7 @@ set mouse=a
      ```
 ### Usage in Vim
 
-- Press <kbd>Ctrl</kbd> + <kbd>j</kbd> to invoke EasyJump in `normal mode` or `insert mode`.
+- Press <kbd>Ctrl</kbd> + <kbd>j</kbd> to invoke EasyJump in `normal mode`, `insert mode`, `visual mode` or `operator-pending mode`.
 - Press <kbd>Enter</kbd> to cancel EasyJump.
 
 ### Configuration in Vim
