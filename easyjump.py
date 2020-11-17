@@ -216,9 +216,7 @@ class Screen:
         chars_list = proc.stdout.decode()[:-1].split("\n")
         lines: typing.List[Line] = []
         for i, chars in enumerate(chars_list):
-            display_width = sum(
-                map(lambda c: 2 if unicodedata.east_asian_width(c) == "W" else 1, chars)
-            )
+            display_width = _calculate_display_width(chars)
             if i == len(chars_list) - 1:
                 trailing_whitespaces = " " * (self._width - display_width)
             else:
@@ -415,19 +413,30 @@ def search_for_key(lines: typing.List[Line], key: str) -> typing.List[Position]:
     positions: typing.List[Position] = []
     for line_index, line in enumerate(lines):
         lower_line_chars = line.chars.lower()
-        column_index = -len(key)
+        char_index = -len(key)
         while True:
-            column_index = lower_line_chars.find(lower_key, column_index + len(key))
-            if column_index < 0:
+            char_index = lower_line_chars.find(lower_key, char_index + len(key))
+            if char_index < 0:
                 break
-            potential_key = line.chars[column_index : column_index + len(key)]
+            potential_key = line.chars[char_index : char_index + len(key)]
             if not _test_potential_key(potential_key, key):
                 continue
-            offset = line_offset + column_index
+            column_index = _calculate_display_width(line.chars[:char_index])
+            offset = line_offset + char_index
             position = Position(line_index + 1, column_index + 1, offset)
             positions.append(position)
         line_offset += len(line.chars) + len(line.trailing_whitespaces)
     return positions
+
+
+def _calculate_display_width(s: str) -> int:
+    display_width = 0
+    for c in s:
+        if unicodedata.east_asian_width(c) == "W":
+            display_width += 2
+        else:
+            display_width += 1
+    return display_width
 
 
 def _test_potential_key(potential_key: str, key: str) -> bool:
