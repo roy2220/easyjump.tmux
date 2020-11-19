@@ -26,7 +26,7 @@ function! s:invoke(mode) abort
     endif
     if result == ''
         if a:mode ==# 'o'
-            call feedkeys("\<esc>")
+            call feedkeys("\<esc>".(col('.') == 1 ? '' : 'l'))
         endif
         return
     endif
@@ -37,20 +37,29 @@ function! s:invoke(mode) abort
         return
     endif
     let winid = win_getid()
-    if v:mouse_winid != winid
+    let [line, column] = [v:mouse_lnum, v:mouse_col]
+    if a:mode ==# 'v' || a:mode ==# 'o'
+        if v:mouse_winid != winid
+            if a:mode ==# 'o'
+                call feedkeys("\<esc>".(col('.') == 1 ? '' : 'l'))
+            endif
+            return
+        endif
         if a:mode ==# 'v'
-            return
+            let cur_pos = getcurpos()
+            if line > cur_pos[1] || (line == cur_pos[1] && column > cur_pos[2])
+                let column += 1
+            endif
         endif
-        if a:mode ==# 'o'
-            call feedkeys("\<esc>")
-            return
+    else
+        if v:mouse_winid != winid
+            call win_gotoid(v:mouse_winid)
         endif
-        call win_gotoid(v:mouse_winid)
     endif
     if a:mode ==# 'v'
         normal! gv
     endif
-    execute printf('normal! %dG%d|', v:mouse_lnum, v:mouse_col)
+    execute printf('normal! %dG%d|', line, column)
 endfunction
 
 command! -nargs=0 EasyJump call s:invoke('n')
