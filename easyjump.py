@@ -409,7 +409,7 @@ def _do_get_char(prompt: str, temp_file_name: str) -> str:
         "-1",
         "-p",
         prompt,
-        'run-shell -b "tee >> {} << EOF\\n%1\\nEOF"'.format(
+        'run-shell -b "tee >> {} << EOF\\n%%%\\nEOF"'.format(
             shlex.quote(temp_file_name)
         ),
     ]
