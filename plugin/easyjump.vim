@@ -7,12 +7,24 @@ let s:dir_name = expand('<sfile>:p:h')
 
 function! s:invoke(mode) abort
     let script_file_name = s:dir_name.'/../easyjump.py'
+    let key = s:get_key()
+    if key == ''
+        return
+    endif
     let smart_case = get(g:, 'easyjump_smart_case', v:true)
     let label_chars = get(g:, 'easyjump_label_chars', '')
     let label_attrs = get(g:, 'easyjump_label_attrs', '')
     let text_attrs = get(g:, 'easyjump_text_attrs', '')
-    let command = printf('/usr/bin/env python3 %s mouse %s %s %s %s on',
-    \    shellescape(script_file_name),
+    let command = printf('/usr/bin/env python3 %s'
+    \    .' --key %s'
+    \    .' --mode mouse'
+    \    .' --smart-case %s'
+    \    .' --label-chars %s'
+    \    .' --label-attrs %s'
+    \    .' --text-attrs %s'
+    \    .' --print-command-only on',
+    \    script_file_name,
+    \    shellescape(key),
     \    smart_case ? 'on' : 'off',
     \    shellescape(label_chars),
     \    shellescape(label_attrs),
@@ -60,6 +72,28 @@ function! s:invoke(mode) abort
         normal! gv
     endif
     execute printf('normal! %dG%d|', line, column)
+endfunction
+
+function! s:get_key() abort
+    let key = ''
+    while len(key) < 2
+        redraw | echo 'search for key (2 chars): '.key
+        let c = getchar()
+        if type(c) != v:t_number
+            if c == "\<bs>"
+                let key = ''
+            endif
+            continue
+        endif
+        let c = nr2char(c)
+        if c == "\<esc>" || c == "\<cr>"
+            redraw | echo ''
+            return ''
+        endif
+        let key .= c
+    endwhile
+    redraw | echo ''
+    return key
 endfunction
 
 command! -nargs=0 EasyJump call s:invoke('n')

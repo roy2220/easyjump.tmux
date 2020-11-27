@@ -36,11 +36,11 @@ def main():
             [
                 sys.executable,
                 script_file_name,
-                "xcopy",
-                smart_case,
-                label_chars,
-                label_attrs,
-                text_attrs,
+                "--mode", "xcopy",
+                "--smart-case", smart_case,
+                "--label-chars", label_chars,
+                "--label-attrs", label_attrs,
+                "--text-attrs", text_attrs,
             ]
         )
         + " >>{} 2>&1 || true".format(shlex.quote(log_file_name)),

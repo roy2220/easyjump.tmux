@@ -1,3 +1,4 @@
+import argparse
 import os
 import shlex
 import signal
@@ -16,23 +17,44 @@ class Mode(Enum):
     XCOPY = 2
 
 
-def arg(arg_idx: int) -> str:
-    args = sys.argv
-    if arg_idx >= len(args):
-        return ""
-    arg = args[arg_idx]
-    return arg
+def parse_args():
+    arg_parser = argparse.ArgumentParser()
+    arg_parser.add_argument("--mode")
+    arg_parser.add_argument("--smart-case")
+    arg_parser.add_argument("--label-chars")
+    arg_parser.add_argument("--label-attrs")
+    arg_parser.add_argument("--text-attrs")
+    arg_parser.add_argument("--print-command-only")
+    arg_parser.add_argument("--key")
+
+    class Args(argparse.Namespace):
+        def __init__(self):
+            self.mode = ""
+            self.smart_case = ""
+            self.label_chars = ""
+            self.label_attrs = ""
+            self.text_attrs = ""
+            self.print_command_only = ""
+            self.key = ""
+
+    args = arg_parser.parse_args(sys.argv[1:], namespace=Args())
+
+    global MODE, SMART_CASE, LABEL_CHARS, LABEL_ATTRS, TEXT_ATTRS, TEXT_ATTRS, PRINT_COMMAND_ONLY, KEY
+    MODE = {
+        "mouse": Mode.MOUSE,
+        "xcopy": Mode.XCOPY,
+    }[args.mode.lower() or "mouse"]
+    SMART_CASE = (args.smart_case.lower() or "on") == "on"
+    LABEL_CHARS = args.label_chars or "fjdkslaghrueiwoqptyvncmxzb1234567890"
+    LABEL_ATTRS = args.label_attrs or "\033[1m\033[38;5;172m"
+    TEXT_ATTRS = args.text_attrs or "\033[0m\033[38;5;237m"
+    PRINT_COMMAND_ONLY = (
+        args.print_command_only.lower() or "on"
+    ) == "on"  # mouse mode only
+    KEY = args.key
 
 
-MODE = {
-    "mouse": Mode.MOUSE,
-    "xcopy": Mode.XCOPY,
-}[arg(1).lower() or "mouse"]
-SMART_CASE = (arg(2).lower() or "on") == "on"
-LABEL_CHARS = arg(3) or "fjdkslaghrueiwoqptyvncmxzb1234567890"
-LABEL_ATTRS = arg(4) or "\033[1m\033[38;5;172m"
-TEXT_ATTRS = arg(5) or "\033[0m\033[38;5;237m"
-PRINT_COMMAND_ONLY = (arg(6).lower() or "off") == "on"  # mouse mode only
+parse_args()
 
 
 class Screen:
@@ -333,6 +355,8 @@ class Position:
 
 
 def get_key() -> str:
+    if len(KEY) == 2:
+        return KEY
     return _get_chars("search for key", 2, None)
 
 
