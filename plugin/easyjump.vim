@@ -7,7 +7,7 @@ let s:dir_name = expand('<sfile>:p:h')
 
 function! s:invoke(mode) abort
     let script_file_name = s:dir_name.'/../easyjump.py'
-    let key = s:get_key()
+    let key = s:get_key() " lead to the movement of the cursor
     if key == ''
         return
     endif
@@ -30,6 +30,7 @@ function! s:invoke(mode) abort
     \    shellescape(label_attrs),
     \    shellescape(text_attrs),
     \)
+    sleep 1m " wait for the cursor to move back
     let result = system(command)
     mode
     if v:shell_error != 0
