@@ -56,9 +56,9 @@ There some differences between `tmux-jump` and `easyjump.tmux`:
 
 ## Usage
 
-- Press `prefix` + <kbd>j</kbd> to invoke EasyJump.
-- Press <kbd>Ctrl</kbd> + <kbd>j</kbd> to invoke EasyJump in `copy mode`.
-- Press <kbd>Enter</kbd> to cancel EasyJump.
+- Press `prefix` + <kbd>j</kbd> to **invoke** EasyJump.
+- Press <kbd>Ctrl</kbd> + <kbd>j</kbd> to **invoke** EasyJump in `copy mode`.
+- Press <kbd>Enter</kbd> to **cancel** EasyJump.
 
 ## Configuration
 
@@ -113,8 +113,8 @@ Vim 8 or Neovim is required.
      ```
 ### Usage in Vim
 
-- Press <kbd>Ctrl</kbd> + <kbd>j</kbd> to invoke EasyJump in `normal mode`, `insert mode`, `visual mode` or `operator-pending mode`.
-- Press <kbd>Enter</kbd> to cancel EasyJump.
+- Press <kbd>Ctrl</kbd> + <kbd>j</kbd> to **invoke** EasyJump in `normal mode`, `insert mode`, `visual mode` or `operator-pending mode`.
+- Press <kbd>Enter</kbd> to **cancel** EasyJump.
 
 ### Configuration in Vim
 
