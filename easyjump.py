@@ -26,6 +26,8 @@ def parse_args():
     arg_parser.add_argument("--text-attrs")
     arg_parser.add_argument("--print-command-only")
     arg_parser.add_argument("--key")
+    arg_parser.add_argument("--cursor-pos")
+    arg_parser.add_argument("--regions")
 
     class Args(argparse.Namespace):
         def __init__(self):
@@ -36,10 +38,12 @@ def parse_args():
             self.text_attrs = ""
             self.print_command_only = ""
             self.key = ""
+            self.cursor_pos = ""
+            self.regions = ""
 
     args = arg_parser.parse_args(sys.argv[1:], namespace=Args())
 
-    global MODE, SMART_CASE, LABEL_CHARS, LABEL_ATTRS, TEXT_ATTRS, TEXT_ATTRS, PRINT_COMMAND_ONLY, KEY
+    global MODE, SMART_CASE, LABEL_CHARS, LABEL_ATTRS, TEXT_ATTRS, TEXT_ATTRS, PRINT_COMMAND_ONLY, KEY, CURSOR_POS, REGIONS
     MODE = {
         "mouse": Mode.MOUSE,
         "xcopy": Mode.XCOPY,
@@ -52,6 +56,15 @@ def parse_args():
         args.print_command_only.lower() or "on"
     ) == "on"  # mouse mode only
     KEY = args.key
+    CURSOR_POS = tuple(
+        map(
+            lambda x: int(x),
+            [] if args.cursor_pos == "" else args.cursor_pos.split(",", 1),
+        )
+    )
+    REGIONS = tuple(
+        map(lambda x: int(x), [] if args.regions == "" else args.regions.split(","))
+    )
 
 
 parse_args()
@@ -131,7 +144,7 @@ class Screen:
         if self.lines[0].chars == "":
             # adapt to bug of tmux: cursor at end of line,
             line_length = len(self._lines[position.line_number - 1].chars)
-            reverse_column_number = line_length - position.column_number + 1
+            reverse_column_number = line_length - position.char_number + 1
             args = [
                 "tmux",
                 "send-keys",
@@ -147,7 +160,7 @@ class Screen:
             )
         else:
             # cursor at start of line
-            if position.column_number >= 2:
+            if position.char_number >= 2:
                 args = [
                     "tmux",
                     "send-keys",
@@ -155,7 +168,7 @@ class Screen:
                     self._id,
                     "-X",
                     "-N",
-                    str(position.column_number - 1),
+                    str(position.char_number - 1),
                     "cursor-right",
                 ]
                 subprocess.run(
@@ -186,12 +199,10 @@ class Screen:
             )
 
     @property
-    def cursor_x(self) -> int:
-        return self._cursor_x
-
-    @property
-    def cursor_y(self) -> int:
-        return self._cursor_y
+    def cursor_pos(self) -> typing.Tuple[int, int]:
+        if len(CURSOR_POS) == 2:
+            return CURSOR_POS[0], CURSOR_POS[1]
+        return self._cursor_x + 1, self._cursor_y + 1
 
     @property
     def lines(self) -> typing.List["Line"]:
@@ -350,6 +361,7 @@ class Line:
 @dataclass
 class Position:
     line_number: int
+    char_number: int
     column_number: int
     offset: int
 
@@ -446,8 +458,12 @@ def search_for_key(lines: typing.List[Line], key: str) -> typing.List[Position]:
             if not _test_potential_key(potential_key, key):
                 continue
             column_index = _calculate_display_width(line.chars[:char_index])
+            if not _point_is_in_region(column_index + 1, line_index + 1):
+                continue
             offset = line_offset + char_index
-            position = Position(line_index + 1, column_index + 1, offset)
+            position = Position(
+                line_index + 1, char_index + 1, column_index + 1, offset
+            )
             positions.append(position)
         line_offset += len(line.chars) + len(line.trailing_whitespaces)
     return positions
@@ -472,6 +488,17 @@ def _test_potential_key(potential_key: str, key: str) -> bool:
         if c.isupper():
             return False
     return True
+
+
+def _point_is_in_region(x: int, y: int) -> bool:
+    n = len(REGIONS)
+    if n == 0:
+        return True
+    for i in range(0, n, 4):
+        region = REGIONS[i : i + 4]
+        if x >= region[0] and y >= region[1] and x <= region[2] and y <= region[3]:
+            return True
+    return False
 
 
 def generate_labels(
@@ -505,12 +532,11 @@ def generate_labels(
 def sort_labels(
     labels: typing.List[str],
     positions: typing.List[Position],
-    cursor_x: int,
-    cursor_y: int,
+    cursor_pos: typing.Tuple[int, int],
 ):
     def distance_to_cursor(position: Position) -> float:
-        a = position.column_number - (cursor_x + 1)
-        b = 2 * (position.line_number - (cursor_y + 1))
+        a = position.column_number - cursor_pos[0]
+        b = 2 * (position.line_number - cursor_pos[1])
         c = (a * a + b * b) ** 0.5
         return c
 
@@ -543,7 +569,7 @@ def main():
         screen.jump_to_position(position)
         return
     labels, label_length = generate_labels(len(key), len(positions))
-    sort_labels(labels, positions, screen.cursor_x, screen.cursor_y)
+    sort_labels(labels, positions, screen.cursor_pos)
     with screen.label_positions(positions, labels):
         label = get_label(label_length, labels)
     if label is None:

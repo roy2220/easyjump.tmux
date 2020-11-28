@@ -7,7 +7,9 @@ let s:dir_name = expand('<sfile>:p:h')
 
 function! s:invoke(mode) abort
     let script_file_name = s:dir_name.'/../easyjump.py'
-    let key = s:get_key() " lead to the movement of the cursor
+    let cursor_pos = s:get_cursor_pos()
+    let regions = s:get_regions()
+    let key = s:get_key()
     if key == ''
         return
     endif
@@ -16,6 +18,8 @@ function! s:invoke(mode) abort
     let label_attrs = get(g:, 'easyjump_label_attrs', '')
     let text_attrs = get(g:, 'easyjump_text_attrs', '')
     let command = printf('/usr/bin/env python3 %s'
+    \    .' --cursor-pos %s'
+    \    .' --regions %s'
     \    .' --key %s'
     \    .' --mode mouse'
     \    .' --smart-case %s'
@@ -23,14 +27,15 @@ function! s:invoke(mode) abort
     \    .' --label-attrs %s'
     \    .' --text-attrs %s'
     \    .' --print-command-only on',
-    \    script_file_name,
+    \    shellescape(script_file_name),
+    \    join(cursor_pos, ','),
+    \    join(regions, ','),
     \    shellescape(key),
     \    smart_case ? 'on' : 'off',
     \    shellescape(label_chars),
     \    shellescape(label_attrs),
     \    shellescape(text_attrs),
     \)
-    sleep 1m " wait for the cursor to move back
     let result = system(command)
     mode
     if v:shell_error != 0
@@ -95,6 +100,32 @@ function! s:get_key() abort
     endwhile
     redraw | echo ''
     return key
+endfunction
+
+function! s:get_cursor_pos() abort
+    let [lnum, col] = getcurpos()[1:2]
+    let screen_pos = screenpos(win_getid(), lnum, col)
+    let cursor_pos = [screen_pos.col, screen_pos.row]
+    return cursor_pos
+endfunction
+
+function! s:get_regions() abort
+    let regions = []
+    for winnr in range(1, winnr('$'))
+        let winid = win_getid(winnr)
+        let win_info = getwininfo(winid)[0]
+        if win_info.terminal
+            continue
+        endif
+        let region = [
+        \    win_info.wincol,
+        \    win_info.winrow,
+        \    win_info.wincol + win_info.width - 1,
+        \    win_info.winrow + win_info.height - 1,
+        \]
+        call extend(regions, region)
+    endfor
+    return regions
 endfunction
 
 command! -nargs=0 EasyJump call s:invoke('n')
