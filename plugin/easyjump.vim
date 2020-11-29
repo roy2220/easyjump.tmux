@@ -17,25 +17,17 @@ function! s:invoke(mode) abort
     let label_chars = get(g:, 'easyjump_label_chars', '')
     let label_attrs = get(g:, 'easyjump_label_attrs', '')
     let text_attrs = get(g:, 'easyjump_text_attrs', '')
-    let command = printf('/usr/bin/env python3 %s'
-    \    .' --cursor-pos %s'
-    \    .' --regions %s'
-    \    .' --key %s'
-    \    .' --mode mouse'
-    \    .' --smart-case %s'
-    \    .' --label-chars %s'
-    \    .' --label-attrs %s'
-    \    .' --text-attrs %s'
-    \    .' --print-command-only on',
-    \    shellescape(script_file_name),
-    \    join(cursor_pos, ','),
-    \    join(regions, ','),
-    \    shellescape(key),
-    \    smart_case ? 'on' : 'off',
-    \    shellescape(label_chars),
-    \    shellescape(label_attrs),
-    \    shellescape(text_attrs),
-    \)
+    let command = '/usr/bin/env python3'
+    \    .' '.shellescape(script_file_name)
+    \    .' --cursor-pos='.join(cursor_pos, ',')
+    \    .' --regions='.join(regions, ',')
+    \    .' --key='.shellescape(key)
+    \    .' --mode=mouse'
+    \    .' --smart-case='.(smart_case ? 'on' : 'off')
+    \    .' --label-chars='.shellescape(label_chars)
+    \    .' --label-attrs='.shellescape(label_attrs)
+    \    .' --text-attrs='.shellescape(text_attrs)
+    \    .' --print-command-only=on'
     let result = system(command)
     mode
     if v:shell_error != 0
