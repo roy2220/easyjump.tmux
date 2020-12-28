@@ -93,6 +93,56 @@ class Screen:
         if not self._alternate_allowed:
             self._snapshot = self._get_snapshot()
 
+    def _fill_info(self):
+        results = _run_tmux_command(
+            "display-message",
+            "-p",
+            "#{pane_id},#{pane_tty},#{pane_width},#{pane_height},#{cursor_x},#{cursor_y},#{history_size},#{scroll_position},#{alternate_on}",
+        ).split(",")
+        self._id = results[0]
+        self._tty = results[1]
+        self._width = int(results[2])
+        self._height = int(results[3])
+        self._cursor_x = int(results[4])
+        self._cursor_y = int(results[5])
+        self._history_size = int(results[6])
+        self._in_copy_mode = results[7] != ""
+        if self._in_copy_mode:
+            self._scroll_position = int(results[7])
+        else:
+            self._scroll_position = None
+        self._alternate_on = results[8] == "1"
+        if self._alternate_on:
+            self._alternate_allowed = False
+        else:
+            result = _run_tmux_command("show-option", "-gv", "alternate-screen")
+            self._alternate_allowed = result == "on"
+
+    def _get_lines(self) -> typing.List["Line"]:
+        args = ["capture-pane", "-t", self._id]
+        if self._in_copy_mode:
+            start_line_number = -self._scroll_position
+            end_line_number = start_line_number + self._height - 1
+            args += ["-S", str(start_line_number), "-E", str(end_line_number)]
+        args += ["-p"]
+        chars_list = _run_tmux_command(*args).split("\n")
+        lines: typing.List[Line] = []
+        for i, chars in enumerate(chars_list):
+            display_width = _calculate_display_width(chars)
+            if i == len(chars_list) - 1:
+                trailing_whitespaces = " " * (self._width - display_width)
+            else:
+                trailing_whitespaces = " " * (self._width - display_width) + "\r\n"
+            line = Line(chars, trailing_whitespaces)
+            lines.append(line)
+        return lines
+
+    def _get_snapshot(self) -> str:
+        snapshot = _run_tmux_command(
+            "capture-pane", "-t", self._id, "-e", "-p"
+        ).replace("\n", "\r\n")
+        return snapshot
+
     @contextmanager
     def label_positions(
         self, positions: typing.List["Position"], labels: typing.List[str]
@@ -110,159 +160,6 @@ class Screen:
                 self._leave_alternate()
             else:
                 self._update(self._snapshot)
-
-    def jump_to_position(self, position: "Position"):
-        if MODE == MODE.XCOPY:
-            self._xcopy_jump_to_position(position)
-        elif MODE == MODE.MOUSE:
-            self._mouse_jump_to_position(position)
-        else:
-            assert False
-
-    def _xcopy_jump_to_position(self, position: "Position"):
-        ok = self._enter_copy_mode()
-        if not ok:
-            return
-        args = ["tmux", "send-keys", "-t", self._id, "-X", "top-line"]
-        subprocess.run(
-            args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
-        if position.line_number >= 2:
-            args = [
-                "tmux",
-                "send-keys",
-                "-t",
-                self._id,
-                "-X",
-                "-N",
-                str(position.line_number - 1),
-                "cursor-down",
-            ]
-            subprocess.run(
-                args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-            )
-        if self.lines[0].chars == "":
-            # adapt to bug of tmux: cursor at end of line,
-            line_length = len(self._lines[position.line_number - 1].chars)
-            reverse_column_number = line_length - position.char_number + 1
-            args = [
-                "tmux",
-                "send-keys",
-                "-t",
-                self._id,
-                "-X",
-                "-N",
-                str(reverse_column_number),
-                "cursor-left",
-            ]
-            subprocess.run(
-                args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-            )
-        else:
-            # cursor at start of line
-            if position.char_number >= 2:
-                args = [
-                    "tmux",
-                    "send-keys",
-                    "-t",
-                    self._id,
-                    "-X",
-                    "-N",
-                    str(position.char_number - 1),
-                    "cursor-right",
-                ]
-                subprocess.run(
-                    args,
-                    check=True,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-
-    def _mouse_jump_to_position(self, position: "Position"):
-        x = bytes((0x20 + position.column_number,))
-        y = bytes((0x20 + position.line_number,))
-        keys = b"\033[M " + x + y + b"\033[M#" + x + y
-        keys_in_hex = keys.hex()
-        args = [
-            "tmux",
-            "send-keys",
-            "-t",
-            self._id,
-            "-H",
-        ]
-        args.extend(keys_in_hex[i : i + 2] for i in range(0, len(keys_in_hex), 2))
-        if PRINT_COMMAND_ONLY:
-            sys.stdout.write(shlex.join(args))
-        else:
-            subprocess.run(
-                args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-            )
-
-    @property
-    def cursor_pos(self) -> typing.Tuple[int, int]:
-        if len(CURSOR_POS) == 2:
-            return CURSOR_POS[0], CURSOR_POS[1]
-        return self._cursor_x + 1, self._cursor_y + 1
-
-    @property
-    def lines(self) -> typing.List["Line"]:
-        return self._lines
-
-    def _fill_info(self):
-        args = [
-            "tmux",
-            "display-message",
-            "-p",
-            "#{pane_id},#{pane_tty},#{pane_width},#{pane_height},#{cursor_x},#{cursor_y},#{history_size},#{scroll_position},#{alternate_on}",
-        ]
-        proc = subprocess.run(args, check=True, capture_output=True)
-        results = proc.stdout.decode()[:-1].split(",")
-        self._id = results[0]
-        self._tty = results[1]
-        self._width = int(results[2])
-        self._height = int(results[3])
-        self._cursor_x = int(results[4])
-        self._cursor_y = int(results[5])
-        self._history_size = int(results[6])
-        self._in_copy_mode = results[7] != ""
-        if self._in_copy_mode:
-            self._scroll_position = int(results[7])
-        else:
-            self._scroll_position = None
-        self._alternate_on = results[8] == "1"
-        if self._alternate_on:
-            self._alternate_allowed = False
-        else:
-            args = ["tmux", "show-option", "-gv", "alternate-screen"]
-            proc = subprocess.run(args, check=True, capture_output=True)
-            result = proc.stdout.decode()[:-1]
-            self._alternate_allowed = result == "on"
-
-    def _get_lines(self) -> typing.List["Line"]:
-        args = ["tmux", "capture-pane", "-t", self._id]
-        if self._in_copy_mode:
-            start_line_number = -self._scroll_position
-            end_line_number = start_line_number + self._height - 1
-            args += ["-S", str(start_line_number), "-E", str(end_line_number)]
-        args += ["-p"]
-        proc = subprocess.run(args, check=True, capture_output=True)
-        chars_list = proc.stdout.decode()[:-1].split("\n")
-        lines: typing.List[Line] = []
-        for i, chars in enumerate(chars_list):
-            display_width = _calculate_display_width(chars)
-            if i == len(chars_list) - 1:
-                trailing_whitespaces = " " * (self._width - display_width)
-            else:
-                trailing_whitespaces = " " * (self._width - display_width) + "\r\n"
-            line = Line(chars, trailing_whitespaces)
-            lines.append(line)
-        return lines
-
-    def _get_snapshot(self) -> str:
-        args = ["tmux", "capture-pane", "-t", self._id, "-e", "-p"]
-        proc = subprocess.run(args, check=True, capture_output=True)
-        snapshot = proc.stdout.decode()[:-1].replace("\n", "\r\n")
-        return snapshot
 
     def _do_label_positions(
         self, positions: typing.List["Position"], labels: typing.List[str]
@@ -288,60 +185,10 @@ class Screen:
         raw_with_labels = "".join(segments)
         return raw_with_labels
 
-    def _exit_copy_mode(self):
-        if not self._in_copy_mode:
-            return
-        args = ["tmux", "send-keys", "-t", self._id, "-X", "cancel"]
-        subprocess.run(
-            args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
-        self._in_copy_mode = False
-
-    def _enter_copy_mode(self) -> bool:
-        if self._in_copy_mode:
-            return True
-        args = ["tmux", "copy-mode", "-t", self._id]
-        subprocess.run(
-            args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
-        if self._scroll_position is not None:
-            history_size = self._get_history_size()
-            if history_size % 2 != self._history_size % 2:
-                # adapt to bug of tmux
-                self._scroll_position -= 1
-            self._history_size = history_size
-            if self._scroll_position > self._history_size:
-                return False
-            args = [
-                "tmux",
-                "send-keys",
-                "-t",
-                self._id,
-                "-X",
-                "goto-line",
-                str(self._scroll_position),
-            ]
-            subprocess.run(
-                args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-            )
-        self._in_copy_mode = True
-        return True
-
-    def _get_history_size(self) -> int:
-        args = ["tmux", "display-message", "-t", self._id, "-p", "#{history_size}"]
-        proc = subprocess.run(args, check=True, capture_output=True)
-        history_size = int(proc.stdout.decode()[:-1])
-        return history_size
-
     def _enter_alternate(self):
         with open(self._tty, "a") as f:
             f.write("\033[?1049h")
         self._alternate_on = True
-
-    def _leave_alternate(self):
-        with open(self._tty, "a") as f:
-            f.write("\033[?1049l")
-        self._alternate_on = False
 
     def _update(self, raw: str):
         with open(self._tty, "a") as f:
@@ -350,6 +197,124 @@ class Screen:
             f.write("\033[{};{}H".format(self._cursor_y + 1, self._cursor_x + 1))
         if self._scroll_position is not None and not self._alternate_on:
             self._scroll_position += self._height  # raw.count("\n") + 1
+
+    def _leave_alternate(self):
+        with open(self._tty, "a") as f:
+            f.write("\033[?1049l")
+        self._alternate_on = False
+
+    def jump_to_position(self, position: "Position"):
+        if MODE == MODE.XCOPY:
+            self._xcopy_jump_to_position(position)
+        elif MODE == MODE.MOUSE:
+            self._mouse_jump_to_position(position)
+        else:
+            assert False
+
+    def _xcopy_jump_to_position(self, position: "Position"):
+        ok = self._enter_copy_mode()
+        if not ok:
+            return
+        _run_tmux_command("send-keys", "-t", self._id, "-X", "top-line")
+        if position.line_number >= 2:
+            _run_tmux_command(
+                "send-keys",
+                "-t",
+                self._id,
+                "-X",
+                "-N",
+                str(position.line_number - 1),
+                "cursor-down",
+            )
+        if self.lines[0].chars == "":
+            # adapt to bug of tmux: cursor at end of line,
+            line_length = len(self._lines[position.line_number - 1].chars)
+            reverse_column_number = line_length - position.char_number + 1
+            _run_tmux_command(
+                "send-keys",
+                "-t",
+                self._id,
+                "-X",
+                "-N",
+                str(reverse_column_number),
+                "cursor-left",
+            )
+        else:
+            # cursor at start of line
+            if position.char_number >= 2:
+                _run_tmux_command(
+                    "send-keys",
+                    "-t",
+                    self._id,
+                    "-X",
+                    "-N",
+                    str(position.char_number - 1),
+                    "cursor-right",
+                )
+
+    def _mouse_jump_to_position(self, position: "Position"):
+        x = bytes((0x20 + position.column_number,))
+        y = bytes((0x20 + position.line_number,))
+        keys = b"\033[M " + x + y + b"\033[M#" + x + y
+        keys_in_hex = keys.hex()
+        args = [
+            "send-keys",
+            "-t",
+            self._id,
+            "-H",
+        ]
+        args.extend(keys_in_hex[i : i + 2] for i in range(0, len(keys_in_hex), 2))
+        if PRINT_COMMAND_ONLY:
+            sys.stdout.write(shlex.join(("tmux", *args)))
+        else:
+            _run_tmux_command(*args)
+
+    @property
+    def cursor_pos(self) -> typing.Tuple[int, int]:
+        if len(CURSOR_POS) == 2:
+            return CURSOR_POS[0], CURSOR_POS[1]
+        return self._cursor_x + 1, self._cursor_y + 1
+
+    @property
+    def lines(self) -> typing.List["Line"]:
+        return self._lines
+
+    def _exit_copy_mode(self):
+        if not self._in_copy_mode:
+            return
+        _run_tmux_command("send-keys", "-t", self._id, "-X", "cancel")
+        self._in_copy_mode = False
+
+    def _enter_copy_mode(self) -> bool:
+        if self._in_copy_mode:
+            return True
+        _run_tmux_command("copy-mode", "-t", self._id)
+        if self._scroll_position is not None:
+            history_size = self._get_history_size()
+            if history_size % 2 != self._history_size % 2:
+                # adapt to bug of tmux
+                self._scroll_position -= 1
+            self._history_size = history_size
+            if self._scroll_position > self._history_size:
+                return False
+            _run_tmux_command(
+                "send-keys",
+                "-t",
+                self._id,
+                "-X",
+                "goto-line",
+                str(self._scroll_position),
+            )
+        self._in_copy_mode = True
+        return True
+
+    def _get_history_size(self) -> int:
+        history_size = int(
+            _run_tmux_command(
+                "display-message", "-t", self._id, "-p", "#{history_size}"
+            )
+        )
+        return history_size
 
 
 @dataclass
@@ -415,8 +380,7 @@ def _get_char(prompt: str) -> str:
 
 def _do_get_char(prompt: str, temp_file_name: str) -> str:
     os.mkfifo(temp_file_name)
-    args = [
-        "tmux",
+    _run_tmux_command(
         "command-prompt",
         "-1",
         "-p",
@@ -424,8 +388,7 @@ def _do_get_char(prompt: str, temp_file_name: str) -> str:
         'run-shell -b "tee >> {} << EOF\\n%%%\\nEOF"'.format(
             shlex.quote(temp_file_name)
         ),
-    ]
-    subprocess.run(args, check=True)
+    )
 
     def handler(signum, frame):
         raise TimeoutError()
@@ -556,6 +519,12 @@ def find_label(
             position = positions[i]
             return position
     return None
+
+
+def _run_tmux_command(*args: str):
+    proc = subprocess.run(("tmux", *args), check=True, capture_output=True)
+    result = proc.stdout.decode()[:-1]
+    return result
 
 
 def main():
