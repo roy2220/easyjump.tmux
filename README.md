@@ -128,4 +128,6 @@ let g:easyjump_text_attrs = "\e[0m\e[38;5;237m"
 
 nmap <C-J> <Plug>EasyJump
 imap <C-J> <Plug>EasyJump
+vmap <C-J> <Plug>EasyJump
+omap <C-J> <Plug>EasyJump
 ```
