@@ -72,6 +72,9 @@ set-option -g @easyjump-label-attrs "\e[1m\e[38;5;172m"
 set-option -g @easyjump-text-attrs "\e[0m\e[38;5;237m"
 ```
 
+**Note**: `@easyjump-label-chars`/`@easyjump-text-attrs` is escape sequence for text color and formatting,
+see https://misc.flogisoft.com/bash/tip_colors_and_formatting for more information.
+
 ## Integration with Vim
 
 Vim 8 or Neovim is required.
@@ -131,3 +134,6 @@ imap <C-J> <Plug>EasyJump
 vmap <C-J> <Plug>EasyJump
 omap <C-J> <Plug>EasyJump
 ```
+
+**Note**: `g:easyjump_label_attrs`/`g:easyjump_text_attrs` is escape sequence for text color and formatting,
+see https://misc.flogisoft.com/bash/tip_colors_and_formatting for more information.

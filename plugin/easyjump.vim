@@ -17,7 +17,7 @@ function! s:invoke(mode) abort
     let label_chars = get(g:, 'easyjump_label_chars', '')
     let label_attrs = get(g:, 'easyjump_label_attrs', '')
     let text_attrs = get(g:, 'easyjump_text_attrs', '')
-    let command = '/usr/bin/env python3'
+    let command = 'python3'
     \    .' '.shellescape(script_file_name)
     \    .' --cursor-pos='.join(cursor_pos, ',')
     \    .' --regions='.join(regions, ',')
