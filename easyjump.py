@@ -253,9 +253,9 @@ class Screen:
                 )
 
     def _mouse_jump_to_position(self, position: "Position"):
-        x = bytes((0x20 + position.column_number,))
-        y = bytes((0x20 + position.line_number,))
-        keys = b"\033[M " + x + y + b"\033[M#" + x + y
+        keys = "\033[0;{x};{y}M\033[3;{x};{y}M".format(
+            x=position.column_number, y=position.line_number
+        ).encode()
         keys_in_hex = keys.hex()
         args = [
             "send-keys",

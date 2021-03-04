@@ -6,6 +6,22 @@ let g:loaded_easyjump = v:true
 let s:dir_name = expand('<sfile>:p:h')
 
 function! s:invoke(mode) abort
+    if !has('nvim')
+        " change mouse protocol
+        let temp = &ttymouse
+        execute 'set ttymouse=urxvt'
+    endif
+    try
+        call s:do_invoke(a:mode)
+    finally
+        if !has('nvim')
+            " restore mouse protocol
+            call timer_start(0, {_ -> execute('set ttymouse='.temp)})
+        endif
+    endtry
+endfunction
+
+function! s:do_invoke(mode) abort
     let script_file_name = s:dir_name.'/../easyjump.py'
     let cursor_pos = s:get_cursor_pos()
     let regions = s:get_regions()
