@@ -1,20 +1,16 @@
 #!/usr/bin/env python3
 import datetime
 import os
+import platform
+import re
 import shlex
 import subprocess
 import sys
 import tempfile
 
 
-def get_option(option_name: str) -> str:
-    args = ["tmux", "show-option", "-gqv", option_name]
-    proc = subprocess.run(args, check=True, capture_output=True)
-    option_value = proc.stdout.decode()[:-1]
-    return option_value
-
-
 def main():
+    check_requirements()
     key_binding = get_option("@easyjump-key-binding") or "j"
     smart_case = get_option("@easyjump-smart-case")
     label_chars = get_option("@easyjump-label-chars")
@@ -58,6 +54,24 @@ def main():
     subprocess.run(
         args3, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
     )
+
+
+def check_requirements():
+    python_version = platform.python_version_tuple()
+    if (int(python_version[0]), int(python_version[1])) < (3,8):
+        raise Exception("python version >= 3.8 required")
+    proc = subprocess.run(("tmux", "-V"), check=True, capture_output=True)
+    result = proc.stdout.decode()[:-1]
+    tmux_version = float(re.compile(r"^tmux (\d+\.\d+)").match(result).group(1))
+    if tmux_version < 3.1:
+        raise Exception("tmux version >= 3.1 required")
+
+
+def get_option(option_name: str) -> str:
+    args = ["tmux", "show-option", "-gqv", option_name]
+    proc = subprocess.run(args, check=True, capture_output=True)
+    option_value = proc.stdout.decode()[:-1]
+    return option_value
 
 
 main()

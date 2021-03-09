@@ -113,7 +113,7 @@ endfunction
 function! s:get_cursor_pos() abort
     let [lnum, col] = getcurpos()[1:2]
     let screen_pos = screenpos(win_getid(), lnum, col)
-    let cursor_pos = [screen_pos.col, screen_pos.row]
+    let cursor_pos = [screen_pos.col - 1, screen_pos.row - 1]
     return cursor_pos
 endfunction
 
