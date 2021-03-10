@@ -83,19 +83,19 @@ class Screen:
         scroll_position: int
         cursor_x: int
         cursor_y: int
-        selection_present: bool
+        selection: typing.Optional[typing.Tuple[int, int, int, int]]
 
         def __init__(
             self,
             scroll_position: int,
             cursor_x: int,
             cursor_y: int,
-            selection_present: bool,
+            selection: typing.Optional[typing.Tuple[int, int, int, int]],
         ):
             self.scroll_position = scroll_position
             self.cursor_x = cursor_x
             self.cursor_y = cursor_y
-            self.selection_present = selection_present
+            self.selection = selection
 
     _copy_mode: typing.Optional[_CopyMode]
     _alternate_on: bool
@@ -112,50 +112,60 @@ class Screen:
             self._snapshot = self._get_snapshot()
 
     def _fill_info(self):
-        results = _run_tmux_command(
-            "display-message",
-            "-p",
-            "#{pane_id},"
-            + "#{pane_tty},"
-            + "#{pane_width},"
-            + "#{pane_height},"
-            + "#{cursor_x},"
-            + "#{cursor_y},"
-            + "#{history_size},"
-            + "#{scroll_position},"
-            + "#{selection_present},"
-            + "#{copy_cursor_x},"
-            + "#{copy_cursor_y},"
-            + "#{selection_start_x},"
-            + "#{selection_start_y},"
-            + "#{alternate_on}",
-        ).split(",")
-        self._id = results[0]
-        self._tty = results[1]
-        self._width = int(results[2])
-        self._height = int(results[3])
-        cursor_x = int(results[4])
-        cursor_y = int(results[5])
+        tmux_vars = _get_tmux_vars(
+            "pane_id",
+            "pane_tty",
+            "pane_width",
+            "pane_height",
+            "cursor_x",
+            "cursor_y",
+            "history_size",
+            "scroll_position",
+            "selection_present",
+            "copy_cursor_x",
+            "copy_cursor_y",
+            "selection_start_x",
+            "selection_start_y",
+            "selection_end_x",
+            "selection_end_y",
+            "alternate_on",
+        )
+        self._id = tmux_vars["pane_id"]
+        self._tty = tmux_vars["pane_tty"]
+        self._width = int(tmux_vars["pane_width"])
+        self._height = int(tmux_vars["pane_height"])
+        cursor_x = int(tmux_vars["cursor_x"])
+        cursor_y = int(tmux_vars["cursor_y"])
         self._cursor_pos = [(cursor_x, cursor_y)]
-        self._history_size = int(results[6])
-        self._in_copy_mode = results[7] != ""
+        self._history_size = int(tmux_vars["history_size"])
+        self._in_copy_mode = tmux_vars["scroll_position"] != ""
         if self._in_copy_mode:
-            scroll_position = int(results[7])
-            selection_present = results[8] == "1"
+            scroll_position = int(tmux_vars["scroll_position"])
+            copy_cursor_x = int(tmux_vars["copy_cursor_x"])
+            copy_cursor_y = int(tmux_vars["copy_cursor_y"])
+            selection_present = tmux_vars["selection_present"] == "1"
             if selection_present:
-                cursor_x = int(results[11])
-                cursor_y = int(results[12])
-                cursor_y -= self._history_size - scroll_position  # tmux bug?
+                selection_start_x = int(tmux_vars["selection_start_x"])
+                selection_start_y = int(tmux_vars["selection_start_y"])
+                selection_start_y -= self._history_size - scroll_position  # tmux bug?
+                selection_end_x = int(tmux_vars["selection_end_x"])
+                selection_end_y = int(tmux_vars["selection_end_y"])
+                selection_end_y -= self._history_size - scroll_position  # tmux bug?
+                selection = (
+                    selection_start_x,
+                    selection_start_y,
+                    selection_end_x,
+                    selection_end_y,
+                )
             else:
-                cursor_x = int(results[9])
-                cursor_y = int(results[10])
+                selection = None
             self._copy_mode = Screen._CopyMode(
-                scroll_position, cursor_x, cursor_y, selection_present
+                scroll_position, copy_cursor_x, copy_cursor_y, selection
             )
-            self._cursor_pos.append((cursor_x, cursor_y))
+            self._cursor_pos.append((copy_cursor_x, copy_cursor_y))
         else:
             self._copy_mode = None
-        self._alternate_on = results[13] == "1"
+        self._alternate_on = tmux_vars["alternate_on"] == "1"
         if self._alternate_on:
             self._alternate_allowed = False
         else:
@@ -257,7 +267,7 @@ class Screen:
                 return
             if (
                 self._copy_mode is not None
-                and self._copy_mode.selection_present
+                and self._copy_mode.selection is not None
                 and (y, x) > (self._copy_mode.cursor_y, self._copy_mode.cursor_x)
             ):
                 x += 1
@@ -347,17 +357,21 @@ class Screen:
                 "goto-line",
                 str(self._copy_mode.scroll_position),
             )
-            if restore_copy_cursor or self._copy_mode.selection_present:
-                self._xcopy_jump_to_pos(
-                    self._copy_mode.cursor_x, self._copy_mode.cursor_y
+            if self._copy_mode.selection is not None:
+                self._xcopy_jump_to_pos(*self._copy_mode.selection[:2])
+                selection_is_linewise = self._selection_is_linewise(
+                    self._copy_mode.selection
                 )
-            if self._copy_mode.selection_present:
                 _run_tmux_command(
                     "send-keys",
                     "-t",
                     self._id,
                     "-X",
-                    "begin-selection",
+                    "select-line" if selection_is_linewise else "begin-selection",
+                )
+            if restore_copy_cursor:
+                self._xcopy_jump_to_pos(
+                    self._copy_mode.cursor_x, self._copy_mode.cursor_y
                 )
         self._in_copy_mode = True
         return True
@@ -369,6 +383,15 @@ class Screen:
             )
         )
         return history_size
+
+    def _selection_is_linewise(
+        self, selection: typing.Tuple[int, int, int, int]
+    ) -> bool:
+        x1, _, x2, y2 = selection
+        if x1 != 0:
+            return False
+        line = self._lines[y2].chars
+        return _calculate_char_index(line, x2) == len(line)
 
 
 @dataclass
@@ -492,7 +515,7 @@ def _calculate_char_index(line: str, x: int) -> int:
             display_width += 2
         else:
             display_width += 1
-    return 0
+    return len(line)
 
 
 def _calculate_display_width(s: str) -> int:
@@ -591,6 +614,15 @@ def _run_tmux_command(*args: str):
     proc = subprocess.run(("tmux", *args), check=True, capture_output=True)
     result = proc.stdout.decode()[:-1]
     return result
+
+
+def _get_tmux_vars(*tmux_var_names: str):
+    result = _run_tmux_command(
+        "display-message", "-p", "\n".join("#{%s}" % s for s in tmux_var_names)
+    )
+    tmux_var_values = result.split("\n")
+    tmux_vars = dict(zip(tmux_var_names, tmux_var_values))
+    return tmux_vars
 
 
 def main():
