@@ -75,27 +75,26 @@ class Screen:
     _tty: str
     _width: int
     _height: int
-    _cursor_x: int
-    _cursor_y: int
+    _cursor_pos: typing.List[typing.Tuple[int, int]]
     _history_size: int
     _in_copy_mode: bool
 
     class _CopyMode:
         scroll_position: int
-        copy_cursor_x: int
-        copy_cursor_y: int
+        cursor_x: int
+        cursor_y: int
         selection_present: bool
 
         def __init__(
             self,
             scroll_position: int,
-            copy_cursor_x: int,
-            copy_cursor_y: int,
+            cursor_x: int,
+            cursor_y: int,
             selection_present: bool,
         ):
             self.scroll_position = scroll_position
-            self.copy_cursor_x = copy_cursor_x
-            self.copy_cursor_y = copy_cursor_y
+            self.cursor_x = cursor_x
+            self.cursor_y = cursor_y
             self.selection_present = selection_present
 
     _copy_mode: typing.Optional[_CopyMode]
@@ -135,23 +134,25 @@ class Screen:
         self._tty = results[1]
         self._width = int(results[2])
         self._height = int(results[3])
-        self._cursor_x = int(results[4])
-        self._cursor_y = int(results[5])
+        cursor_x = int(results[4])
+        cursor_y = int(results[5])
+        self._cursor_pos = [(cursor_x, cursor_y)]
         self._history_size = int(results[6])
         self._in_copy_mode = results[7] != ""
         if self._in_copy_mode:
             scroll_position = int(results[7])
             selection_present = results[8] == "1"
             if selection_present:
-                copy_cursor_x = int(results[11])
-                copy_cursor_y = int(results[12])
-                copy_cursor_y -= self._history_size - scroll_position  # tmux bug?
+                cursor_x = int(results[11])
+                cursor_y = int(results[12])
+                cursor_y -= self._history_size - scroll_position  # tmux bug?
             else:
-                copy_cursor_x = int(results[9])
-                copy_cursor_y = int(results[10])
+                cursor_x = int(results[9])
+                cursor_y = int(results[10])
             self._copy_mode = Screen._CopyMode(
-                scroll_position, copy_cursor_x, copy_cursor_y, selection_present
+                scroll_position, cursor_x, cursor_y, selection_present
             )
+            self._cursor_pos.append((cursor_x, cursor_y))
         else:
             self._copy_mode = None
         self._alternate_on = results[13] == "1"
@@ -239,7 +240,8 @@ class Screen:
         with open(self._tty, "a") as f:
             f.write("\033[2J\033[H\033[0m")
             f.write(raw)
-            f.write("\033[{};{}H".format(self._cursor_y + 1, self._cursor_x + 1))
+            cursor_x, cursor_y = self._cursor_pos[-1]
+            f.write("\033[{};{}H".format(cursor_y + 1, cursor_x + 1))
         if self._copy_mode is not None and not self._alternate_on:
             self._copy_mode.scroll_position += self._height  # raw.count("\n") + 1
 
@@ -256,8 +258,7 @@ class Screen:
             if (
                 self._copy_mode is not None
                 and self._copy_mode.selection_present
-                and (y, x)
-                > (self._copy_mode.copy_cursor_y, self._copy_mode.copy_cursor_x)
+                and (y, x) > (self._copy_mode.cursor_y, self._copy_mode.cursor_x)
             ):
                 x += 1
             self._xcopy_jump_to_pos(x, y)
@@ -267,43 +268,33 @@ class Screen:
             assert False
 
     def _xcopy_jump_to_pos(self, x: int, y: int):
-        _run_tmux_command("send-keys", "-t", self._id, "-X", "top-line")
-        if y >= 1:
+        cursor_x, cursor_y = self._cursor_pos[-1]
+        if (x, y) == (cursor_x, cursor_y):
+            return
+        dy = y - cursor_y
+        if dy != 0:
             _run_tmux_command(
                 "send-keys",
                 "-t",
                 self._id,
                 "-X",
                 "-N",
-                str(y),
-                "cursor-down",
+                str(dy if dy > 0 else -dy),
+                "cursor-down" if dy > 0 else "cursor-up",
             )
+        _run_tmux_command("send-keys", "-t", self._id, "-X", "start-of-line")
         char_index = _calculate_char_index(self._lines[y].chars, x)
-        if self.lines[0].chars == "":
-            # adapt to bug of tmux: cursor at end of line,
-            line_length = len(self._lines[y].chars)
-            reverse_char_index = line_length - char_index
+        if char_index >= 1:
             _run_tmux_command(
                 "send-keys",
                 "-t",
                 self._id,
                 "-X",
                 "-N",
-                str(reverse_char_index),
-                "cursor-left",
+                str(char_index),
+                "cursor-right",
             )
-        else:
-            # cursor at start of line
-            if char_index >= 1:
-                _run_tmux_command(
-                    "send-keys",
-                    "-t",
-                    self._id,
-                    "-X",
-                    "-N",
-                    str(char_index),
-                    "cursor-right",
-                )
+        self._cursor_pos[-1] = (x, y)
 
     def _mouse_jump_to_pos(self, x: int, y: int):
         keys = "\033[0;{c};{l}M\033[3;{c};{l}M".format(c=x + 1, l=y + 1).encode()
@@ -322,11 +313,7 @@ class Screen:
 
     @property
     def cursor_pos(self) -> typing.Tuple[int, int]:
-        if len(CURSOR_POS) == 2:
-            return CURSOR_POS[0], CURSOR_POS[1]
-        if self._copy_mode is not None:
-            return self._copy_mode.copy_cursor_x, self._copy_mode.copy_cursor_y
-        return self._cursor_x, self._cursor_y
+        return self._cursor_pos[-1]
 
     @property
     def lines(self) -> typing.List["Line"]:
@@ -336,12 +323,14 @@ class Screen:
         if not self._in_copy_mode:
             return
         _run_tmux_command("send-keys", "-t", self._id, "-X", "cancel")
+        self._cursor_pos.pop()
         self._in_copy_mode = False
 
     def _enter_copy_mode(self, restore_copy_cursor: bool) -> bool:
         if self._in_copy_mode:
             return True
         _run_tmux_command("copy-mode", "-t", self._id)
+        self._cursor_pos.append(self._cursor_pos[-1])
         if self._copy_mode is not None:
             history_size = self._get_history_size()
             if history_size % 2 != self._history_size % 2:
@@ -358,15 +347,9 @@ class Screen:
                 "goto-line",
                 str(self._copy_mode.scroll_position),
             )
-            if (restore_copy_cursor or self._copy_mode.selection_present) and (
-                self._copy_mode.copy_cursor_x,
-                self._copy_mode.copy_cursor_y,
-            ) != (
-                self._cursor_x,
-                self._cursor_y,
-            ):
+            if restore_copy_cursor or self._copy_mode.selection_present:
                 self._xcopy_jump_to_pos(
-                    self._copy_mode.copy_cursor_x, self._copy_mode.copy_cursor_y
+                    self._copy_mode.cursor_x, self._copy_mode.cursor_y
                 )
             if self._copy_mode.selection_present:
                 _run_tmux_command(
@@ -577,6 +560,9 @@ def sort_labels(
     positions: typing.List[Position],
     cursor_pos: typing.Tuple[int, int],
 ):
+    if len(CURSOR_POS) == 2:
+        cursor_pos = (CURSOR_POS[0] - 1, CURSOR_POS[1] - 1)
+
     def distance_to_cursor(position: Position) -> float:
         a = position.column_number - (cursor_pos[0] + 1)
         b = 2 * (position.line_number - (cursor_pos[1] + 1))
