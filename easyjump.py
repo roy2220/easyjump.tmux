@@ -28,6 +28,7 @@ def parse_args():
     arg_parser.add_argument("--key")
     arg_parser.add_argument("--cursor-pos")
     arg_parser.add_argument("--regions")
+    arg_parser.add_argument("--auto-begin-selection")
 
     class Args(argparse.Namespace):
         def __init__(self):
@@ -40,10 +41,11 @@ def parse_args():
             self.key = ""
             self.cursor_pos = ""
             self.regions = ""
+            self.auto_begin_selection = ""
 
     args = arg_parser.parse_args(sys.argv[1:], namespace=Args())
 
-    global MODE, SMART_CASE, LABEL_CHARS, LABEL_ATTRS, TEXT_ATTRS, TEXT_ATTRS, PRINT_COMMAND_ONLY, KEY, CURSOR_POS, REGIONS
+    global MODE, SMART_CASE, LABEL_CHARS, LABEL_ATTRS, TEXT_ATTRS, TEXT_ATTRS, PRINT_COMMAND_ONLY, KEY, CURSOR_POS, REGIONS, AUTO_BEGIN_SELECTION
     MODE = {
         "mouse": Mode.MOUSE,
         "xcopy": Mode.XCOPY,
@@ -65,6 +67,7 @@ def parse_args():
     REGIONS = tuple(
         map(lambda x: int(x), [] if args.regions == "" else args.regions.split(","))
     )
+    AUTO_BEGIN_SELECTION = (args.auto_begin_selection.lower() or "on") == "on"
 
 
 parse_args()
@@ -272,6 +275,16 @@ class Screen:
             ):
                 x += 1
             self._xcopy_jump_to_pos(x, y)
+            if (
+                self._copy_mode is None or self._copy_mode.selection is None
+            ) and AUTO_BEGIN_SELECTION:
+                _run_tmux_command(
+                    "send-keys",
+                    "-t",
+                    self._id,
+                    "-X",
+                    "begin-selection",
+                )
         elif MODE == MODE.MOUSE:
             self._mouse_jump_to_pos(x, y)
         else:

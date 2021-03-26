@@ -71,6 +71,7 @@ set-option -g @easyjump-smart-case "on"
 set-option -g @easyjump-label-chars "fjdkslaghrueiwoqptyvncmxzb1234567890"
 set-option -g @easyjump-label-attrs "\e[1m\e[38;5;172m"
 set-option -g @easyjump-text-attrs "\e[0m\e[38;5;237m"
+set-option -g @easyjump-auto-begin-selection "on"
 ```
 
 **Note**: `@easyjump-label-chars`/`@easyjump-text-attrs` is escape sequence for text color and formatting,
