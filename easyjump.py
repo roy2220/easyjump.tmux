@@ -154,6 +154,14 @@ class Screen:
                 selection_end_x = int(tmux_vars["selection_end_x"])
                 selection_end_y = int(tmux_vars["selection_end_y"])
                 selection_end_y -= self._history_size - scroll_position  # tmux bug?
+                if (selection_start_x, selection_start_y) == (
+                    copy_cursor_x,
+                    copy_cursor_y,
+                ):  # tmux bug?
+                    selection_start_x, selection_start_y = (
+                        selection_end_x,
+                        selection_end_y,
+                    )
                 selection = (
                     selection_start_x,
                     selection_start_y,
@@ -268,12 +276,10 @@ class Screen:
             ok = self._enter_copy_mode(False)
             if not ok:
                 return
-            if (
-                self._copy_mode is not None
-                and self._copy_mode.selection is not None
-                and (y, x) > (self._copy_mode.cursor_y, self._copy_mode.cursor_x)
-            ):
-                x += 1
+            if self._copy_mode is not None and self._copy_mode.selection is not None:
+                selection_start_x, selection_start_y = self._copy_mode.selection[:2]
+                if (y, x) > (selection_start_y, selection_start_x):
+                    x += 1
             self._xcopy_jump_to_pos(x, y)
             if (
                 self._copy_mode is None or self._copy_mode.selection is None
