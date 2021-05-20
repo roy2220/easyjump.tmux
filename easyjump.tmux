@@ -9,7 +9,7 @@ import sys
 import tempfile
 
 
-def main():
+def main() -> None:
     check_requirements()
     key_binding = get_option("@easyjump-key-binding") or "j"
     smart_case = get_option("@easyjump-smart-case")
@@ -58,7 +58,7 @@ def main():
     )
 
 
-def check_requirements():
+def check_requirements() -> None:
     python_version = platform.python_version_tuple()
     if (int(python_version[0]), int(python_version[1])) < (3,8):
         raise Exception("python version >= 3.8 required")

@@ -17,7 +17,7 @@ class Mode(Enum):
     XCOPY = 2
 
 
-def parse_args():
+def parse_args() -> None:
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument("--mode")
     arg_parser.add_argument("--smart-case")
@@ -31,7 +31,7 @@ def parse_args():
     arg_parser.add_argument("--auto-begin-selection")
 
     class Args(argparse.Namespace):
-        def __init__(self):
+        def __init__(self) -> None:
             self.mode = ""
             self.smart_case = ""
             self.label_chars = ""
@@ -94,7 +94,7 @@ class Screen:
             cursor_x: int,
             cursor_y: int,
             selection: typing.Optional[typing.Tuple[int, int, int, int]],
-        ):
+        ) -> None:
             self.scroll_position = scroll_position
             self.cursor_x = cursor_x
             self.cursor_y = cursor_y
@@ -106,7 +106,7 @@ class Screen:
     _lines: typing.List["Line"]
     _snapshot: str
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._fill_info()
         if MODE == Mode.MOUSE:
             self._exit_copy_mode()
@@ -114,7 +114,7 @@ class Screen:
         if not self._alternate_allowed:
             self._snapshot = self._get_snapshot()
 
-    def _fill_info(self):
+    def _fill_info(self) -> None:
         tmux_vars = _get_tmux_vars(
             "pane_id",
             "pane_tty",
@@ -211,7 +211,7 @@ class Screen:
     @contextmanager
     def label_positions(
         self, positions: typing.List["Position"], labels: typing.List[str]
-    ):
+    ) -> typing.Generator[None, None, None]:
         raw_with_labels = self._do_label_positions(positions, labels)
         if MODE == Mode.XCOPY:
             self._exit_copy_mode()
@@ -230,7 +230,7 @@ class Screen:
 
     def _do_label_positions(
         self, positions: typing.List["Position"], labels: typing.List[str]
-    ):
+    ) -> str:
         temp: typing.List[str] = []
         for line in self._lines:
             temp.append(line.chars)
@@ -252,12 +252,12 @@ class Screen:
         raw_with_labels = "".join(segments)
         return raw_with_labels
 
-    def _enter_alternate(self):
+    def _enter_alternate(self) -> None:
         with open(self._tty, "a") as f:
             f.write("\033[?1049h")
         self._alternate_on = True
 
-    def _update(self, raw: str):
+    def _update(self, raw: str) -> None:
         with open(self._tty, "a") as f:
             f.write("\033[2J\033[H\033[0m")
             f.write(raw)
@@ -266,12 +266,12 @@ class Screen:
         if self._copy_mode is not None and not self._alternate_on:
             self._copy_mode.scroll_position += self._height  # raw.count("\n") + 1
 
-    def _leave_alternate(self):
+    def _leave_alternate(self) -> None:
         with open(self._tty, "a") as f:
             f.write("\033[?1049l")
         self._alternate_on = False
 
-    def jump_to_pos(self, x: int, y: int):
+    def jump_to_pos(self, x: int, y: int) -> None:
         if MODE == MODE.XCOPY:
             ok = self._enter_copy_mode(False)
             if not ok:
@@ -296,7 +296,7 @@ class Screen:
         else:
             assert False
 
-    def _xcopy_jump_to_pos(self, x: int, y: int):
+    def _xcopy_jump_to_pos(self, x: int, y: int) -> None:
         cursor_x, cursor_y = self._cursor_pos[-1]
         if (x, y) == (cursor_x, cursor_y):
             return
@@ -325,7 +325,7 @@ class Screen:
             )
         self._cursor_pos[-1] = (x, y)
 
-    def _mouse_jump_to_pos(self, x: int, y: int):
+    def _mouse_jump_to_pos(self, x: int, y: int) -> None:
         keys = "\033[0;{c};{l}M\033[3;{c};{l}M".format(c=x + 1, l=y + 1).encode()
         keys_in_hex = keys.hex()
         args = [
@@ -348,7 +348,7 @@ class Screen:
     def lines(self) -> typing.List["Line"]:
         return self._lines
 
-    def _exit_copy_mode(self):
+    def _exit_copy_mode(self) -> None:
         if not self._in_copy_mode:
             return
         _run_tmux_command("send-keys", "-t", self._id, "-X", "cancel")
@@ -485,7 +485,7 @@ def _do_get_char(prompt: str, temp_file_name: str) -> str:
         ),
     )
 
-    def handler(signum, frame):
+    def handler(signum, frame) -> None:
         raise TimeoutError()
 
     signal.signal(signal.SIGALRM, handler)
@@ -601,7 +601,7 @@ def sort_labels(
     labels: typing.List[str],
     positions: typing.List[Position],
     cursor_pos: typing.Tuple[int, int],
-):
+) -> None:
     if len(CURSOR_POS) == 2:
         cursor_pos = (CURSOR_POS[0] - 1, CURSOR_POS[1] - 1)
 
@@ -629,13 +629,13 @@ def find_label(
     return None
 
 
-def _run_tmux_command(*args: str):
+def _run_tmux_command(*args: str) -> str:
     proc = subprocess.run(("tmux", *args), check=True, capture_output=True)
     result = proc.stdout.decode()[:-1]
     return result
 
 
-def _get_tmux_vars(*tmux_var_names: str):
+def _get_tmux_vars(*tmux_var_names: str) -> typing.Dict[str, str]:
     result = _run_tmux_command(
         "display-message", "-p", "\n".join("#{%s}" % s for s in tmux_var_names)
     )
@@ -644,7 +644,7 @@ def _get_tmux_vars(*tmux_var_names: str):
     return tmux_vars
 
 
-def main():
+def main() -> None:
     screen = Screen()
     key = get_key()
     positions = search_for_key(screen.lines, key)
