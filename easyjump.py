@@ -1,4 +1,5 @@
 import argparse
+import itertools
 import os
 import shlex
 import signal
@@ -238,8 +239,10 @@ class Screen:
         raw = "".join(temp)
         offset = 0
         segments: typing.List[str] = []
-        for i, label in enumerate(labels):
-            position = positions[i]
+        for i, position in enumerate(positions):
+            label = labels[i]
+            if label == "":
+                continue
             if offset < position.offset:
                 segment = TEXT_ATTRS + raw[offset : position.offset]
                 segments.append(segment)
@@ -427,59 +430,69 @@ class Position:
 
 
 def get_key() -> str:
-    if len(KEY) == 2:
+    key_length = 2
+    if len(KEY) == key_length:
         return KEY
-    return _get_chars("search for key", 2, None)
-
-
-def get_label(label_length, candidate_labels: typing.List[str]) -> typing.Optional[str]:
-    try:
-        return _get_chars("goto label", label_length, candidate_labels)
-    except ValueError:
-        return None
-
-
-def _get_chars(
-    prompt: str,
-    number_of_chars: int,
-    expected_chars_list: typing.Optional[typing.List[str]],
-) -> str:
-    format = "{} ({} char"
-    if number_of_chars >= 2:
-        format += "s"
-    format += "): {:_<" + str(number_of_chars) + "}"
+    message_template = (
+        "search for key ({key_length} chars): {{:_<{key_length}}}".format(
+            key_length=key_length
+        )
+    )
     chars = ""
-    for _ in range(number_of_chars):
-        prompt_with_input = format.format(prompt, number_of_chars, chars)
-        chars += _get_char(prompt_with_input)
-        if expected_chars_list is not None:
-            for expected_chars in expected_chars_list:
-                if expected_chars.startswith(chars):
-                    break
-            else:
-                raise ValueError()
+    for _ in range(key_length):
+        message = message_template.format(chars)
+        chars += _get_char(message)
     return chars
 
 
-def _get_char(prompt: str) -> str:
+def select_label(labels: typing.List[str]) -> int:
+    min_label_length = len(labels[0])
+    max_label_length = len(labels[-1])
+    message_template = "goto label ("
+    if min_label_length == max_label_length:
+        if min_label_length == 1:
+            message_template += "1 char"
+        else:
+            message_template += "{} chars".format(min_label_length)
+    else:
+        message_template += "{}~{} chars".format(min_label_length, max_label_length)
+    message_template += "): {:_<" + str(max_label_length) + "}"
+    label_2_label_index = {label: i for i, label in enumerate(labels)}
+    chars = ""
+    while True:
+        message = message_template.format(chars)
+        chars += _get_char(message)
+        label_index = label_2_label_index.get(chars)
+        if label_index is not None:
+            return label_index
+        if len(chars) == max_label_length:
+            return -1
+        for label in labels:
+            if label.startswith(chars):
+                break
+        else:
+            return -1
+
+
+def _get_char(message: str) -> str:
     temp_dir_name = tempfile.mkdtemp()
     try:
         temp_file_name = os.path.join(temp_dir_name, "fifo")
         try:
-            return _do_get_char(prompt, temp_file_name)
+            return _do_get_char(message, temp_file_name)
         finally:
             os.unlink(temp_file_name)
     finally:
         os.rmdir(temp_dir_name)
 
 
-def _do_get_char(prompt: str, temp_file_name: str) -> str:
+def _do_get_char(message: str, temp_file_name: str) -> str:
     os.mkfifo(temp_file_name)
     _run_tmux_command(
         "command-prompt",
         "-1",
         "-p",
-        prompt,
+        message,
         'run-shell -b "tee >> {} << EOF\\n%%%\\nEOF"'.format(
             shlex.quote(temp_file_name)
         ),
@@ -569,39 +582,39 @@ def _point_is_in_region(x: int, y: int) -> bool:
     return False
 
 
-def generate_labels(
-    key_length: int, number_of_positions: int
-) -> typing.Tuple[typing.List[str], int]:
-    label_length = 1
-    while len(LABEL_CHARS) ** label_length < number_of_positions:
-        if label_length == min(key_length, len(LABEL_CHARS)):
+def generate_labels(key_length: int, number_of_positions: int) -> typing.List[str]:
+    n = len(LABEL_CHARS)
+    x = 1
+    y = None
+    while True:
+        if x == key_length:
+            y = 0
             break
-        label_length += 1
-    labels: typing.List[str] = []
-
-    def do_generate_labels(label_prefix) -> bool:
-        if len(label_prefix) == label_length - 1:
-            for label_char in LABEL_CHARS:
-                if len(labels) == number_of_positions:
-                    return True
-                label = label_prefix + label_char
-                labels.append(label)
+        m = n ** x
+        for i in range(m):
+            if m - i + i * n >= number_of_positions:
+                y = i
+                break
         else:
-            for label_char in LABEL_CHARS:
-                stop = do_generate_labels(label_prefix + label_char)
-                if stop:
-                    return True
-        return False
+            x += 1
+            continue
+        break
+    labels = ["".join(p) for p in list(itertools.permutations(tuple(LABEL_CHARS), x))]
+    for i in range(y):
+        label_prefix = labels[i]
+        for c in LABEL_CHARS:
+            labels.append(label_prefix + c)
+    labels = labels[y:]
+    if len(labels) > number_of_positions:
+        labels = labels[:number_of_positions]
+    return labels
 
-    do_generate_labels("")
-    return labels, label_length
 
-
-def sort_labels(
+def assign_labels(
     labels: typing.List[str],
     positions: typing.List[Position],
     cursor_pos: typing.Tuple[int, int],
-) -> None:
+) -> typing.List[str]:
     if len(CURSOR_POS) == 2:
         cursor_pos = (CURSOR_POS[0] - 1, CURSOR_POS[1] - 1)
 
@@ -611,12 +624,15 @@ def sort_labels(
         c = (a * a + b * b) ** 0.5
         return c
 
-    rank_2_position_idx = list(range(len(labels)))
+    rank_2_position_idx = list(range(len(positions)))
     rank_2_position_idx.sort(key=lambda i: distance_to_cursor(positions[i]))
-    sorted_labels = [""] * len(labels)
+    assigned_labels = [""] * len(positions)
     for rank, position_idx in enumerate(rank_2_position_idx):
-        sorted_labels[position_idx] = labels[rank]
-    labels[:] = sorted_labels
+        if rank < len(labels):
+            assigned_labels[position_idx] = labels[rank]
+        else:
+            assigned_labels[position_idx] = ""
+    return assigned_labels
 
 
 def find_label(
@@ -654,13 +670,14 @@ def main() -> None:
         position = positions[0]
         screen.jump_to_pos(position.column_number - 1, position.line_number - 1)
         return
-    labels, label_length = generate_labels(len(key), len(positions))
-    sort_labels(labels, positions, screen.cursor_pos)
-    with screen.label_positions(positions, labels):
-        label = get_label(label_length, labels)
-    if label is None:
+    labels = generate_labels(len(key), len(positions))
+    assigned_labels = assign_labels(labels, positions, screen.cursor_pos)
+    with screen.label_positions(positions, assigned_labels):
+        label_index = select_label(labels)
+    if label_index < 0:
         return
-    position = find_label(label, labels, positions)
+    label = labels[label_index]
+    position = find_label(label, assigned_labels, positions)
     if position is None:
         return
     screen.jump_to_pos(position.column_number - 1, position.line_number - 1)
