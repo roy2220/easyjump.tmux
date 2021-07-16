@@ -74,7 +74,7 @@ set-option -g @easyjump-text-attrs "\e[0m\e[38;5;237m"
 set-option -g @easyjump-auto-begin-selection "on"
 ```
 
-**Note**: `@easyjump-label-chars`/`@easyjump-text-attrs` is escape sequence for text color and formatting,
+**Note**: `@easyjump-label-attrs`/`@easyjump-text-attrs` is escape sequence for text coloring and formatting,
 see https://misc.flogisoft.com/bash/tip_colors_and_formatting for more information.
 
 ## Integration with Vim
@@ -137,5 +137,5 @@ vmap <C-J> <Plug>EasyJump
 omap <C-J> <Plug>EasyJump
 ```
 
-**Note**: `g:easyjump_label_attrs`/`g:easyjump_text_attrs` is escape sequence for text color and formatting,
+**Note**: `g:easyjump_label_attrs`/`g:easyjump_text_attrs` is escape sequence for text coloring and formatting,
 see https://misc.flogisoft.com/bash/tip_colors_and_formatting for more information.
