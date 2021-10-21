@@ -64,7 +64,7 @@ def check_requirements() -> None:
         raise Exception("python version >= 3.8 required")
     proc = subprocess.run(("tmux", "-V"), check=True, capture_output=True)
     result = proc.stdout.decode()[:-1]
-    tmux_version = float(re.compile(r"^tmux (\d+\.\d+)").match(result).group(1))
+    tmux_version = float(re.compile(r"^tmux (next-)?(\d+\.\d+)").match(result).group(2))
     if tmux_version < 3.1:
         raise Exception("tmux version >= 3.1 required")
 
