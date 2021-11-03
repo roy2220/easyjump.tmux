@@ -74,6 +74,47 @@ def parse_args() -> None:
 parse_args()
 
 
+class _Selection:
+    x1: int
+    y1: int
+    x2: int
+    y2: int
+    is_rectangle: bool
+
+    def __init__(
+        self,
+        x1: int,
+        y1: int,
+        x2: int,
+        y2: int,
+        is_rectangle: bool,
+    ) -> None:
+        self.x1 = x1
+        self.y1 = y1
+        self.x2 = x2
+        self.y2 = y2
+        self.is_rectangle = is_rectangle
+
+
+class _CopyMode:
+    scroll_position: int
+    cursor_x: int
+    cursor_y: int
+    selection: typing.Optional[_Selection]
+
+    def __init__(
+        self,
+        scroll_position: int,
+        cursor_x: int,
+        cursor_y: int,
+        selection: typing.Optional[_Selection],
+    ) -> None:
+        self.scroll_position = scroll_position
+        self.cursor_x = cursor_x
+        self.cursor_y = cursor_y
+        self.selection = selection
+
+
 class Screen:
     _id: str
     _tty: str
@@ -82,25 +123,6 @@ class Screen:
     _cursor_pos: typing.List[typing.Tuple[int, int]]
     _history_size: int
     _in_copy_mode: bool
-
-    class _CopyMode:
-        scroll_position: int
-        cursor_x: int
-        cursor_y: int
-        selection: typing.Optional[typing.Tuple[int, int, int, int]]
-
-        def __init__(
-            self,
-            scroll_position: int,
-            cursor_x: int,
-            cursor_y: int,
-            selection: typing.Optional[typing.Tuple[int, int, int, int]],
-        ) -> None:
-            self.scroll_position = scroll_position
-            self.cursor_x = cursor_x
-            self.cursor_y = cursor_y
-            self.selection = selection
-
     _copy_mode: typing.Optional[_CopyMode]
     _alternate_on: bool
     _alternate_allowed: bool
@@ -133,6 +155,7 @@ class Screen:
             "selection_end_x",
             "selection_end_y",
             "alternate_on",
+            "rectangle_toggle",
         )
         self._id = tmux_vars["pane_id"]
         self._tty = tmux_vars["pane_tty"]
@@ -163,15 +186,17 @@ class Screen:
                         selection_end_x,
                         selection_end_y,
                     )
-                selection = (
+                is_rectangle = tmux_vars["rectangle_toggle"] == "1"
+                selection = _Selection(
                     selection_start_x,
                     selection_start_y,
                     selection_end_x,
                     selection_end_y,
+                    is_rectangle,
                 )
             else:
                 selection = None
-            self._copy_mode = Screen._CopyMode(
+            self._copy_mode = _CopyMode(
                 scroll_position, copy_cursor_x, copy_cursor_y, selection
             )
             self._cursor_pos.append((copy_cursor_x, copy_cursor_y))
@@ -280,32 +305,38 @@ class Screen:
             if not ok:
                 return
             if self._copy_mode is not None and self._copy_mode.selection is not None:
-                selection_start_x, selection_start_y = self._copy_mode.selection[:2]
+                selection_start_x, selection_start_y = (
+                    self._copy_mode.selection.x1,
+                    self._copy_mode.selection.y1,
+                )
                 if (y, x) > (selection_start_y, selection_start_x):
                     x += 1
-            self._xcopy_jump_to_pos(x, y)
+            tmux_command = []
+            self._xcopy_jump_to_pos(x, y, tmux_command)
             if (
                 self._copy_mode is None or self._copy_mode.selection is None
             ) and AUTO_BEGIN_SELECTION:
-                _run_tmux_command(
+                tmux_command += (
                     "send-keys",
                     "-t",
                     self._id,
                     "-X",
                     "begin-selection",
+                    ";",
                 )
+            _run_tmux_command(*tmux_command)
         elif MODE == MODE.MOUSE:
             self._mouse_jump_to_pos(x, y)
         else:
             assert False
 
-    def _xcopy_jump_to_pos(self, x: int, y: int) -> None:
+    def _xcopy_jump_to_pos(self, x: int, y: int, tmux_command: list[str]) -> None:
         cursor_x, cursor_y = self._cursor_pos[-1]
         if (x, y) == (cursor_x, cursor_y):
             return
         dy = y - cursor_y
         if dy != 0:
-            _run_tmux_command(
+            tmux_command += (
                 "send-keys",
                 "-t",
                 self._id,
@@ -313,11 +344,12 @@ class Screen:
                 "-N",
                 str(dy if dy > 0 else -dy),
                 "cursor-down" if dy > 0 else "cursor-up",
+                ";",
             )
-        _run_tmux_command("send-keys", "-t", self._id, "-X", "start-of-line")
+        tmux_command += ("send-keys", "-t", self._id, "-X", "start-of-line", ";")
         char_index = _calculate_char_index(self._lines[y].chars, x)
         if char_index >= 1:
-            _run_tmux_command(
+            tmux_command += (
                 "send-keys",
                 "-t",
                 self._id,
@@ -325,6 +357,7 @@ class Screen:
                 "-N",
                 str(char_index),
                 "cursor-right",
+                ";",
             )
         self._cursor_pos[-1] = (x, y)
 
@@ -371,30 +404,40 @@ class Screen:
             self._history_size = history_size
             if self._copy_mode.scroll_position > self._history_size:
                 return False
-            _run_tmux_command(
+            tmux_command = [
                 "send-keys",
                 "-t",
                 self._id,
                 "-X",
                 "goto-line",
                 str(self._copy_mode.scroll_position),
-            )
-            if self._copy_mode.selection is not None:
-                self._xcopy_jump_to_pos(*self._copy_mode.selection[:2])
-                selection_is_linewise = self._selection_is_linewise(
-                    self._copy_mode.selection
-                )
-                _run_tmux_command(
-                    "send-keys",
-                    "-t",
-                    self._id,
-                    "-X",
-                    "select-line" if selection_is_linewise else "begin-selection",
-                )
+                ";",
+            ]
+            selection = self._copy_mode.selection
+            if selection is not None:
+                self._xcopy_jump_to_pos(selection.x1, selection.y1, tmux_command)
+                tmux_command += ("send-keys", "-t", self._id, "-X")
+                if selection.is_rectangle:
+                    tmux_command += (
+                        "begin-selection",
+                        ";",
+                        "send-keys",
+                        "-t",
+                        self._id,
+                        "-X",
+                        "rectangle-on",
+                        ";",
+                    )
+                else:
+                    if self._selection_is_linewise(selection):
+                        tmux_command += ("select-line", ";")
+                    else:
+                        tmux_command += ("begin-selection", ";")
             if restore_copy_cursor:
                 self._xcopy_jump_to_pos(
-                    self._copy_mode.cursor_x, self._copy_mode.cursor_y
+                    self._copy_mode.cursor_x, self._copy_mode.cursor_y, tmux_command
                 )
+            _run_tmux_command(*tmux_command)
         self._in_copy_mode = True
         return True
 
@@ -407,13 +450,13 @@ class Screen:
         return history_size
 
     def _selection_is_linewise(
-        self, selection: typing.Tuple[int, int, int, int]
+        self,
+        selection: _Selection,
     ) -> bool:
-        x1, _, x2, y2 = selection
-        if x1 != 0:
+        if selection.x1 != 0:
             return False
-        line = self._lines[y2].chars
-        return _calculate_char_index(line, x2) == len(line)
+        line = self._lines[selection.y2].chars
+        return _calculate_char_index(line, selection.x2) == len(line)
 
 
 @dataclass
