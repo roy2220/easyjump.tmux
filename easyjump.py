@@ -330,7 +330,9 @@ class Screen:
         else:
             assert False
 
-    def _xcopy_jump_to_pos(self, x: int, y: int, tmux_command: list[str]) -> None:
+    def _xcopy_jump_to_pos(
+        self, x: int, y: int, tmux_command: typing.List[str]
+    ) -> None:
         cursor_x, cursor_y = self._cursor_pos[-1]
         if (x, y) == (cursor_x, cursor_y):
             return
