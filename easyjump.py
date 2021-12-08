@@ -281,12 +281,12 @@ class Screen:
         return raw_with_labels
 
     def _enter_alternate(self) -> None:
-        with open(self._tty, "a") as f:
+        with open(self._tty, "w") as f:
             f.write("\033[?1049h")
         self._alternate_on = True
 
     def _update(self, raw: str) -> None:
-        with open(self._tty, "a") as f:
+        with open(self._tty, "w") as f:
             f.write("\033[2J\033[H\033[0m")
             f.write(raw)
             cursor_x, cursor_y = self._cursor_pos[-1]
@@ -295,7 +295,7 @@ class Screen:
             self._copy_mode.scroll_position += self._height  # raw.count("\n") + 1
 
     def _leave_alternate(self) -> None:
-        with open(self._tty, "a") as f:
+        with open(self._tty, "w") as f:
             f.write("\033[?1049l")
         self._alternate_on = False
 
