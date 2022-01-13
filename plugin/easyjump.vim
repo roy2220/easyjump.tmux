@@ -148,7 +148,7 @@ if !hasmapto('<Plug>EasyJump', 'i')
     imap <C-J> <Plug>EasyJump
 endif
 
-vnoremap <silent> <Plug>EasyJump :<C-U>call <SID>invoke('v')<CR>
+vnoremap <silent> <Plug>EasyJump <esc>:<C-U>call <SID>invoke('v')<CR>
 if !hasmapto('<Plug>EasyJump', 'v')
     vmap <C-J> <Plug>EasyJump
 endif
