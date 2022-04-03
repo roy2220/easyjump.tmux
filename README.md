@@ -18,7 +18,7 @@ There some differences between `tmux-jump` and `easyjump.tmux`:
 
 ## Requirements
 
-- Tmux >= 3.1
+- Tmux >= 3.0
 - Python >= 3.8
 
 **Windows is not supported now.**
