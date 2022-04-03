@@ -65,8 +65,8 @@ def check_requirements() -> None:
     proc = subprocess.run(("tmux", "-V"), check=True, capture_output=True)
     result = proc.stdout.decode()[:-1]
     tmux_version = float(re.compile(r"^tmux (next-)?(\d+\.\d+)").match(result).group(2))
-    if tmux_version < 3.1:
-        raise Exception("tmux version >= 3.1 required")
+    if tmux_version < 3.0:
+        raise Exception("tmux version >= 3.0 required")
 
 
 def get_option(option_name: str) -> str:
