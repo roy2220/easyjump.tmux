@@ -33,12 +33,12 @@ def main() -> None:
             [
                 sys.executable,
                 script_file_name,
-                "--mode", "xcopy",
-                "--smart-case", smart_case,
-                "--label-chars", label_chars,
-                "--label-attrs", label_attrs,
-                "--text-attrs", text_attrs,
-                "--auto-begin-selection", auto_begin_selection,
+                "--mode=xcopy",
+                "--smart-case=" + smart_case,
+                "--label-chars=" + label_chars,
+                "--label-attrs=" + label_attrs,
+                "--text-attrs=" + text_attrs,
+                "--auto-begin-selection=" + auto_begin_selection,
             ]
         )
         + " >>{} 2>&1 || true".format(shlex.quote(log_file_name)),
@@ -47,12 +47,12 @@ def main() -> None:
         args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
     )
     args2 = args[:]
-    args2[2:3] = ['-T', 'copy-mode', 'C-' + key_binding]
+    args2[2:3] = ["-T", "copy-mode", "C-" + key_binding]
     subprocess.run(
         args2, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
     )
     args3 = args[:]
-    args3[2:3] = ['-T', 'copy-mode-vi', 'C-' + key_binding]
+    args3[2:3] = ["-T", "copy-mode-vi", "C-" + key_binding]
     subprocess.run(
         args3, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
     )
@@ -60,7 +60,7 @@ def main() -> None:
 
 def check_requirements() -> None:
     python_version = platform.python_version_tuple()
-    if (int(python_version[0]), int(python_version[1])) < (3,8):
+    if (int(python_version[0]), int(python_version[1])) < (3, 8):
         raise Exception("python version >= 3.8 required")
     proc = subprocess.run(("tmux", "-V"), check=True, capture_output=True)
     result = proc.stdout.decode()[:-1]
@@ -70,7 +70,7 @@ def check_requirements() -> None:
 
 
 def get_option(option_name: str) -> str:
-    args = ["tmux", "show-option", "-gqv", option_name]
+    args = ["sh", "-c", "echo -e \"$(tmux show-option -gqv '" + option_name + "')\""]
     proc = subprocess.run(args, check=True, capture_output=True)
     option_value = proc.stdout.decode()[:-1]
     return option_value

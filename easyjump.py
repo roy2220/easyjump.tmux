@@ -46,7 +46,7 @@ def parse_args() -> None:
 
     args = arg_parser.parse_args(sys.argv[1:], namespace=Args())
 
-    global MODE, SMART_CASE, LABEL_CHARS, LABEL_ATTRS, TEXT_ATTRS, TEXT_ATTRS, PRINT_COMMAND_ONLY, KEY, CURSOR_POS, REGIONS, AUTO_BEGIN_SELECTION
+    global MODE, SMART_CASE, LABEL_CHARS, LABEL_ATTRS, TEXT_ATTRS, PRINT_COMMAND_ONLY, KEY, CURSOR_POS, REGIONS, AUTO_BEGIN_SELECTION
     MODE = {
         "mouse": Mode.MOUSE,
         "xcopy": Mode.XCOPY,
@@ -635,7 +635,7 @@ def generate_labels(key_length: int, number_of_positions: int) -> typing.List[st
         if x == key_length:
             y = 0
             break
-        m = n ** x
+        m = n**x
         for i in range(m):
             if m - i + i * n >= number_of_positions:
                 y = i
