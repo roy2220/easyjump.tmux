@@ -70,7 +70,7 @@ def check_requirements() -> None:
 
 
 def get_option(option_name: str) -> str:
-    args = ["sh", "-c", "echo -e \"$(tmux show-option -gqv '" + option_name + "')\""]
+    args = ["sh", "-c", "printf \"$(tmux show-option -gqv '" + option_name + "')\n\""]
     proc = subprocess.run(args, check=True, capture_output=True)
     option_value = proc.stdout.decode()[:-1]
     return option_value
