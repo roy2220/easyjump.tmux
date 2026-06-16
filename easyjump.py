@@ -53,8 +53,8 @@ def parse_args() -> None:
     }[args.mode.lower() or "mouse"]
     SMART_CASE = (args.smart_case.lower() or "on") == "on"
     LABEL_CHARS = args.label_chars or "fjdkslaghrueiwoqptyvncmxzb1234567890"
-    LABEL_ATTRS = args.label_attrs or "\033[1m\033[38;5;172m"
-    TEXT_ATTRS = args.text_attrs or "\033[0m\033[38;5;237m"
+    LABEL_ATTRS = args.label_attrs or "\033[1m\033[38;5;245m"
+    TEXT_ATTRS = args.text_attrs or "\033[0m\033[31m"
     PRINT_COMMAND_ONLY = (
         args.print_command_only.lower() or "on"
     ) == "on"  # mouse mode only
