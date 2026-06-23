@@ -18,8 +18,9 @@ There some differences between `tmux-jump` and `easyjump.tmux`:
 
 ## Requirements
 
-- Tmux >= 3.0
-- Python >= 3.8
+> [!IMPORTANT]
+> - Tmux >= **3.6** -- Tmux 3.6 introduces significant improvements; upgrading to this release is highly recommended.
+> - Python >= **3.8**
 
 **Windows is not supported now.**
 
@@ -59,7 +60,9 @@ There some differences between `tmux-jump` and `easyjump.tmux`:
 
 - Press `prefix` + <kbd>j</kbd> to **invoke** EasyJump.
 - Press <kbd>Ctrl</kbd> + <kbd>j</kbd> to **invoke** EasyJump in `copy mode`.
-- Press <kbd>Enter</kbd> to **cancel** EasyJump.
+- Press <kbd>Esc</kbd>, <kbd>Ctrl</kbd> + <kbd>c</kbd>, <kbd>Ctrl</kbd> + <kbd>d</kbd> to **cancel** EasyJump.
+
+**Note**: Searching for an empty key implies searching for the last key.
 
 ## Configuration
 
@@ -119,7 +122,9 @@ Vim 8 or Neovim is required.
 ### Usage in Vim
 
 - Press <kbd>Ctrl</kbd> + <kbd>j</kbd> to **invoke** EasyJump in `normal mode`, `insert mode`, `visual mode` or `operator-pending mode`.
-- Press <kbd>Enter</kbd> to **cancel** EasyJump.
+- Press <kbd>Esc</kbd>, <kbd>Ctrl</kbd> + <kbd>c</kbd>, <kbd>Ctrl</kbd> + <kbd>d</kbd> to **cancel** EasyJump.
+
+**Note**: Searching for an empty key implies searching for the last key.
 
 ### Configuration in Vim
 
