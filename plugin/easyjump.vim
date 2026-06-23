@@ -25,10 +25,6 @@ function! s:do_invoke(mode) abort
     let script_file_name = s:dir_name.'/../easyjump.py'
     let cursor_pos = s:get_cursor_pos()
     let regions = s:get_regions()
-    let key = s:get_key()
-    if key == ''
-        return
-    endif
     let smart_case = get(g:, 'easyjump_smart_case', v:true)
     let label_chars = get(g:, 'easyjump_label_chars', '')
     let label_attrs = get(g:, 'easyjump_label_attrs', '')
@@ -37,7 +33,6 @@ function! s:do_invoke(mode) abort
     \    .' '.shellescape(script_file_name)
     \    .' --cursor-pos='.join(cursor_pos, ',')
     \    .' --regions='.join(regions, ',')
-    \    .' --key='.shellescape(key)
     \    .' --mode=mouse'
     \    .' --smart-case='.(smart_case ? 'on' : 'off')
     \    .' --label-chars='.shellescape(label_chars)
@@ -86,28 +81,6 @@ function! s:do_invoke(mode) abort
         normal! gv
     endif
     execute printf('normal! %dG%d|', line, column)
-endfunction
-
-function! s:get_key() abort
-    let key = ''
-    while len(key) < 2
-        redraw | echo 'search for key (2 chars): '.key
-        let c = getchar()
-        if type(c) != v:t_number
-            if c == "\<bs>"
-                let key = ''
-            endif
-            continue
-        endif
-        let c = nr2char(c)
-        if c == "\<esc>" || c == "\<cr>"
-            redraw | echo ''
-            return ''
-        endif
-        let key .= c
-    endwhile
-    redraw | echo ''
-    return key
 endfunction
 
 function! s:get_cursor_pos() abort

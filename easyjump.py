@@ -8,6 +8,7 @@ import sys
 import tempfile
 import typing
 import unicodedata
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
@@ -26,7 +27,6 @@ def parse_args() -> None:
     arg_parser.add_argument("--label-attrs")
     arg_parser.add_argument("--text-attrs")
     arg_parser.add_argument("--print-command-only")
-    arg_parser.add_argument("--key")
     arg_parser.add_argument("--cursor-pos")
     arg_parser.add_argument("--regions")
     arg_parser.add_argument("--auto-begin-selection")
@@ -39,14 +39,13 @@ def parse_args() -> None:
             self.label_attrs = ""
             self.text_attrs = ""
             self.print_command_only = ""
-            self.key = ""
             self.cursor_pos = ""
             self.regions = ""
             self.auto_begin_selection = ""
 
     args = arg_parser.parse_args(sys.argv[1:], namespace=Args())
 
-    global MODE, SMART_CASE, LABEL_CHARS, LABEL_ATTRS, TEXT_ATTRS, PRINT_COMMAND_ONLY, KEY, CURSOR_POS, REGIONS, AUTO_BEGIN_SELECTION
+    global MODE, SMART_CASE, LABEL_CHARS, LABEL_ATTRS, TEXT_ATTRS, PRINT_COMMAND_ONLY, CURSOR_POS, REGIONS, AUTO_BEGIN_SELECTION
     MODE = {
         "mouse": Mode.MOUSE,
         "xcopy": Mode.XCOPY,
@@ -58,7 +57,6 @@ def parse_args() -> None:
     PRINT_COMMAND_ONLY = (
         args.print_command_only.lower() or "on"
     ) == "on"  # mouse mode only
-    KEY = args.key
     CURSOR_POS = tuple(
         map(
             lambda x: int(x),
@@ -128,6 +126,7 @@ class Screen:
     _alternate_allowed: bool
     _lines: typing.List["Line"]
     _snapshot: str
+    last_key: str
 
     def __init__(self) -> None:
         self._fill_info()
@@ -156,6 +155,7 @@ class Screen:
             "selection_end_y",
             "alternate_on",
             "rectangle_toggle",
+            "@easyjump-last-key",
         )
         self._id = tmux_vars["pane_id"]
         self._tty = tmux_vars["pane_tty"]
@@ -208,6 +208,7 @@ class Screen:
         else:
             result = _run_tmux_command("show-option", "-gv", "alternate-screen")
             self._alternate_allowed = result == "on"
+        self.last_key = tmux_vars["@easyjump-last-key"]
 
     def _get_lines(self) -> typing.List["Line"]:
         args = ["capture-pane", "-t", self._id]
@@ -474,19 +475,32 @@ class Position:
     offset: int
 
 
-def get_key() -> str:
+def get_key(last_key: str) -> str:
     key_length = 2
-    if len(KEY) == key_length:
-        return KEY
     message_template = (
         "search for key ({key_length} chars): {{:_<{key_length}}}".format(
             key_length=key_length
         )
     )
     chars = ""
-    for _ in range(key_length):
-        message = message_template.format(chars)
-        chars += _get_char(message)
+    with _get_char() as f:
+        while True:
+            message = message_template.format(chars)
+            c = f(message)
+            if c == "":
+                if chars != "":
+                    break
+                if last_key != "":
+                    return last_key
+                continue
+            if c in ("\x08", "\x7f"):  # BS / DEL
+                chars = chars[:-1]
+                continue
+
+            chars += c
+            if len(chars) == key_length:
+                break
+    _run_tmux_command("set", "-g", "@easyjump-last-key", chars)
     return chars
 
 
@@ -502,29 +516,36 @@ def select_label(labels: typing.List[str]) -> int:
     else:
         message_template += "{}~{} chars".format(min_label_length, max_label_length)
     message_template += "): {:_<" + str(max_label_length) + "}"
-    label_2_label_index = {label: i for i, label in enumerate(labels)}
     chars = ""
-    while True:
-        message = message_template.format(chars)
-        chars += _get_char(message)
-        label_index = label_2_label_index.get(chars)
-        if label_index is not None:
-            return label_index
-        if len(chars) == max_label_length:
-            return -1
-        for label in labels:
-            if label.startswith(chars):
-                break
-        else:
-            return -1
+    with _get_char() as f:
+        while True:
+            message = message_template.format(chars)
+            c = f(message)
+            if c == "":
+                continue
+            if c in ("\x08", "\x7f"):  # BS / DEL
+                chars = chars[:-1]
+                continue
+
+            chars += c
+            for i, label in enumerate(labels):
+                if label == chars:
+                    return i
+                if label.startswith(chars):
+                    break
+            else:
+                chars = chars[: -len(c)]
+                continue
 
 
-def _get_char(message: str) -> str:
+@contextmanager
+def _get_char() -> Generator[Callable[[str], str], None, None]:
     temp_dir_name = tempfile.mkdtemp()
     try:
         temp_file_name = os.path.join(temp_dir_name, "fifo")
         try:
-            return _do_get_char(message, temp_file_name)
+            os.mkfifo(temp_file_name)
+            yield lambda message: _do_get_char(message, temp_file_name)
         finally:
             os.unlink(temp_file_name)
     finally:
@@ -532,13 +553,12 @@ def _get_char(message: str) -> str:
 
 
 def _do_get_char(message: str, temp_file_name: str) -> str:
-    os.mkfifo(temp_file_name)
     _run_tmux_command(
         "command-prompt",
         "-1",
         "-p",
         message,
-        'run-shell -b "tee >> {} << EOF\\n%%%\\nEOF"'.format(
+        "run-shell -b \"tee >> {} << 'EOF'\\n%%%\\nEOF\"".format(
             shlex.quote(temp_file_name)
         ),
     )
@@ -554,7 +574,7 @@ def _do_get_char(message: str, temp_file_name: str) -> str:
     finally:
         signal.alarm(0)
         signal.signal(signal.SIGALRM, signal.SIG_DFL)
-    if char == "":
+    if char in ("\x1b", "\x03", "\x04"):  # Esc / CTRL-C / CTRL-D
         raise SystemExit()
     return char
 
@@ -707,7 +727,7 @@ def _get_tmux_vars(*tmux_var_names: str) -> typing.Dict[str, str]:
 
 def main() -> None:
     screen = Screen()
-    key = get_key()
+    key = get_key(screen.last_key)
     positions = search_for_key(screen.lines, key)
     if len(positions) == 0:
         return
@@ -719,8 +739,6 @@ def main() -> None:
     assigned_labels = assign_labels(labels, positions, screen.cursor_pos)
     with screen.label_positions(positions, assigned_labels):
         label_index = select_label(labels)
-    if label_index < 0:
-        return
     label = labels[label_index]
     position = find_label(label, assigned_labels, positions)
     if position is None:
