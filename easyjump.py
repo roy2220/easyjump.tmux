@@ -8,7 +8,6 @@ import sys
 import tempfile
 import typing
 import unicodedata
-from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
@@ -539,7 +538,7 @@ def select_label(labels: typing.List[str]) -> int:
 
 
 @contextmanager
-def _get_char() -> Generator[Callable[[str], str], None, None]:
+def _get_char() -> typing.Generator[typing.Callable[[str], str], None, None]:
     temp_dir_name = tempfile.mkdtemp()
     try:
         temp_file_name = os.path.join(temp_dir_name, "fifo")
