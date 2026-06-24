@@ -59,14 +59,14 @@ function! s:do_invoke(mode) abort
     endif
     let winid = win_getid()
     let [line, column] = [v:mouse_lnum, v:mouse_col]
-    if a:mode ==# 'v' || a:mode ==# 'o'
+    if a:mode ==# 'x' || a:mode ==# 'o'
         if v:mouse_winid != winid
             if a:mode ==# 'o'
                 call feedkeys("\<esc>".(col('.') == 1 ? '' : 'l'))
             endif
             return
         endif
-        if a:mode ==# 'v'
+        if a:mode ==# 'x'
             let cur_pos = getcurpos()
             if line > cur_pos[1] || (line == cur_pos[1] && column > cur_pos[2])
                 let column += 1
@@ -77,7 +77,7 @@ function! s:do_invoke(mode) abort
             call win_gotoid(v:mouse_winid)
         endif
     endif
-    if a:mode ==# 'v'
+    if a:mode ==# 'x'
         normal! gv
     endif
     execute printf('normal! %dG%d|', line, column)
@@ -121,9 +121,9 @@ if !hasmapto('<Plug>EasyJump', 'i')
     imap <C-J> <Plug>EasyJump
 endif
 
-vnoremap <silent> <Plug>EasyJump <esc>:<C-U>call <SID>invoke('v')<CR>
-if !hasmapto('<Plug>EasyJump', 'v')
-    vmap <C-J> <Plug>EasyJump
+xnoremap <silent> <Plug>EasyJump <esc>:<C-U>call <SID>invoke('x')<CR>
+if !hasmapto('<Plug>EasyJump', 'x')
+    xmap <C-J> <Plug>EasyJump
 endif
 
 onoremap <silent> <Plug>EasyJump :call <SID>invoke('o')<CR>
